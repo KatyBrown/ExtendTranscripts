@@ -1,11 +1,44 @@
 #!/usr/bin/env python3
 from skbio.alignment import StripedSmithWaterman
-import re
 import numpy as np
 import math
+import UtilityFunctions
+import Consensus
 
 
-def SWalign(seq1, seq2, pD):
+def subMatrixIUPAC(match_score, mismatch_score):
+    '''
+    Generates a substitution matrix for the SWalign algorithm where
+    ambiguous bases are scored equally to non-ambiguous bases.
+    In the first step of finding a consensus sequence with just two sequences
+    there will be many positions where each base is equally likely - this
+    prevents them from being penalised.
+    
+    Parameters
+    ----------
+    match_score: int
+        Score awarded to a match under the SW model
+    mismatch_score: int
+        Score awarded to a mismatch under the SW model
+    
+    Returns
+    -------
+    scoreD: dict
+        2D dictionary of every possible combination of nucleotides, including
+        IUPAC characters, and the score to assign to this combination.
+    '''
+    amb = Consensus.IUPAC()[0]
+    scoreD = dict()
+    for base1, L in amb.items():
+        scoreD.setdefault(base1, dict())
+        for base2 in amb.keys():
+            if base2 in L:
+                scoreD[base1][base2] = match_score
+            else:
+                scoreD[base1][base2] = mismatch_score
+    return (scoreD)
+
+def SWalign(seq1, seq2, pD, useSub=False):
     '''
     Aligns two sequences using the StripedSmithWaterman algorithm
     as implements in skbio.
@@ -45,10 +78,20 @@ def SWalign(seq1, seq2, pD):
         cigar: cigar string describing the alignment as at
         http://genome.sph.umich.edu/wiki/SAM
     '''   
-    ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['gap_open'],
-                               gap_extend_penalty=pD['gap_extend'],
-                               match_score=pD['match_score'],
-                               mismatch_score=pD['mismatch_score'])(seq2)
+    if useSub:
+        subs = UtilityFunctions.subMatrixIUPAC(pD['match_score'],
+                                               pD['mismatch_score'])
+        
+        ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['gap_open'],
+                                   gap_extend_penalty=pD['gap_extend'],
+                                   match_score=pD['match_score'],
+                                   mismatch_score=pD['mismatch_score'],
+                                   substitution_matrix=subs)(seq2)
+    else:
+        ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['gap_open'],
+                                   gap_extend_penalty=pD['gap_extend'],
+                                   match_score=pD['match_score'],
+                                   mismatch_score=pD['mismatch_score'])(seq2)
 
     aliD = {'optimal_alignment_score': ali.optimal_alignment_score,
             'query_start': ali.query_begin,
@@ -59,26 +102,14 @@ def SWalign(seq1, seq2, pD):
     return (aliD)
 
 
-def readCIGAR(cigar):
-    return(re.findall(r'\d+\D*', cigar))
-
-def lengthFromCIGAR(cigar, excludeI=False, excludeD=False):
-    if excludeI:
-        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|D]', cigar)]))
-    if excludeD:
-        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|I]', cigar)]))
-    
-    return(sum([int(x) for x in re.findall(r'\d+', cigar)]))
-
-
 def alignFromCIGAR(seq1, seq2, cigar):
     '''
     I = insertion in query
     D = insertion in target
     '''
-    if cigar == "%sM" % lengthFromCIGAR(cigar):
+    if cigar == "%sM" % UtilityFunctions.lengthFromCIGAR(cigar):
         return (seq1, seq2)
-    cigar_L = readCIGAR(cigar)
+    cigar_L = UtilityFunctions.readCIGAR(cigar)
     s1 = []
     s2 = []
     n1 = 0
@@ -108,7 +139,7 @@ def alignFromCIGAR(seq1, seq2, cigar):
         raise RuntimeError ("Aligned sequences are not the same length.")
     return (s1, s2)
 
-def getClips(result, query_seq, target_seq, pD):
+def getClips(result, query_seq, target_seq):
     Q_length = len(query_seq)
     T_length = len(target_seq)
 
@@ -118,14 +149,8 @@ def getClips(result, query_seq, target_seq, pD):
     Q_end_nclipped = Q_length - result['query_end']
     T_end_nclipped = T_length - result['target_end']
     
-    if pD['clip_perc']:
-        max_clip_Q = math.ceil(pD['clip_perc'] * Q_length)
-        max_clip_T = math.ceil(pD['clip_perc'] * T_length)
-    else:
-        max_clip_Q, max_clip_T = pD['max_clip'], pD['max_clip']
     return (Q_start_nclipped, T_start_nclipped,
-            Q_end_nclipped, T_end_nclipped,
-            max_clip_Q, max_clip_T)
+            Q_end_nclipped, T_end_nclipped)
     
 
 def findOverlapType(result, query_seq, target_seq, pD, keep_failed=False):
@@ -133,8 +158,15 @@ def findOverlapType(result, query_seq, target_seq, pD, keep_failed=False):
     Add various additional annotations to the SW alignment output
     to help determine if the sequences overlap and how much.
     '''
-    (Q_start_nclipped, T_start_nclipped, Q_end_nclipped, T_end_nclipped,
-     max_clip_Q, max_clip_T) = getClips(result, query_seq, target_seq, pD)
+    (Q_start_nclipped, T_start_nclipped,
+     Q_end_nclipped, T_end_nclipped) = getClips(result, query_seq,
+                                                target_seq)
+    
+    if pD['clip_perc']:
+        max_clip_Q = math.ceil(pD['clip_perc'] * len(query_seq))
+        max_clip_T = math.ceil(pD['clip_perc'] * len(target_seq))
+    else:
+        max_clip_Q, max_clip_T = pD['max_clip'], pD['max_clip']
 
     # If the starts of both sequences are clipped there is a mismatched region
     if Q_start_nclipped > max_clip_Q and T_start_nclipped > max_clip_T:
@@ -190,7 +222,7 @@ def getAlignmentLocal(result, query_seq, target_seq, pD, keep_failed=False):
     
     Q_subseq, T_subseq = alignFromCIGAR(Q_subseq, T_subseq, result['cigar'])
     
-    alignment_length = lengthFromCIGAR(result['cigar'])
+    alignment_length = UtilityFunctions.lengthFromCIGAR(result['cigar'])
     Q_subseq = np.array(list(Q_subseq))
     T_subseq = np.array(list(T_subseq))
     
@@ -205,30 +237,54 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
     subseqQ = "".join(list(result['alignment'][0]))
     subseqT = "".join(list(result['alignment'][1]))
     
-    (Q_start_nclipped, T_start_nclipped, Q_end_nclipped, T_end_nclipped,
-     max_clip_Q, max_clip_T) = getClips(result, query_seq, target_seq, pD)
-    
-    if Q_start_nclipped <= max_clip_Q:
-        subseqQ = "".join("-" * Q_start_nclipped) + subseqQ[Q_start_nclipped:]
-        Q_start_nclipped = 0
-    if T_start_nclipped <= max_clip_T:
-        subseqT = "".join("-" * T_start_nclipped) + subseqT[T_start_nclipped:]
-        T_start_nclipped = 0
+    (Q_start_nclipped, T_start_nclipped,
+     Q_end_nclipped, T_end_nclipped) = getClips(result, query_seq, target_seq)
 
-    if Q_end_nclipped <= max_clip_Q:
-        subseqQ = "".join("-"*Q_end_nclipped) + subseqQ[Q_end_nclipped:]
-        Q_end_nclipped = 0
-    if T_end_nclipped <= max_clip_T:
-        subseqT = "".join("-" * T_end_nclipped) + subseqT[T_end_nclipped:]
-        T_end_nclipped = 0
-    
     Qpad_start = "".join("-" * T_start_nclipped)
     Tpad_start = "".join("-" * Q_start_nclipped)
     
     Qpad_end = "".join("-" * T_end_nclipped)
     Tpad_end = "".join("-" * Q_end_nclipped)
+
+    if Q_start_nclipped == 0 or T_start_nclipped == 0:
+        start_cigar_start = ""
+    else:
+        start_cigar_start = "%iX" % (min(Q_start_nclipped, T_start_nclipped))
+
+    if T_start_nclipped >= Q_start_nclipped:
+        if T_start_nclipped == 0:
+            start_cigar = "%s" % start_cigar_start
+        else:
+            start_cigar = "%s%iD" % (start_cigar_start, T_start_nclipped)
+    else:
+        start_cigar = "%s%iI" % (start_cigar_start, Q_start_nclipped)
+        
+    if Q_end_nclipped == 0 or T_end_nclipped == 0:
+        end_cigar_end = ""
+    else:
+        end_cigar_end = "%iX" % (min(Q_end_nclipped, T_end_nclipped))
+    if T_end_nclipped >= Q_end_nclipped:
+        if T_end_nclipped == 0:
+            end_cigar = "%s" % end_cigar_end
+        else:
+            end_cigar = "%iD%s" % (T_end_nclipped, end_cigar_end)
+    else:
+        end_cigar = "%iI%s" % (Q_end_nclipped, end_cigar_end)
+        
+    cigar_updated = "%s%s%s" % (start_cigar, result['cigar'], end_cigar)
     
     fullseqQ = Qpad_start + query_seq[:result['query_start']] + subseqQ + query_seq[result['query_end']:] + Qpad_end
     fullseqT = Tpad_start + target_seq[:result['target_start']] + subseqT + target_seq[result['target_end']:] + Tpad_end
-    print (fullseqQ)
-    print (fullseqT)
+    result['query_seq_aligned'] = fullseqQ
+    result['target_seq_aligned'] = fullseqT
+    if len(fullseqT) != len(fullseqQ):
+        raise RuntimeError ("Aligned sequences are not the same length")
+    if UtilityFunctions.lengthFromCIGAR(cigar_updated) != len(fullseqQ):
+        print (cigar_updated, Q_start_nclipped, T_start_nclipped)
+        print (fullseqQ)
+        print (len(fullseqQ))
+        print (UtilityFunctions.lengthFromCIGAR(cigar_updated))
+        raise RuntimeError ("oh no")
+    result['cigar_updated'] = cigar_updated
+
+    return(result)

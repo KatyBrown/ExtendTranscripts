@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
-import operator
-
+import re
+import itertools
 def FastaToDict(infile):
     '''
     Converts a fasta file to a dictionary
@@ -43,15 +43,57 @@ def FastaToDict(infile):
         D[nam] = seq
     return D
 
-def makeConsensus(F):
-    seqs = np.array([list(seq.upper()) for seq in F.values]())
-    consensus = []
-    for i in range(0,len(seqs[0,:])):
-        unique, counts = np.unique(seqs[:,i], return_counts=True)
-        unique_ng = unique[unique != "-"]
-        counts_ng = counts[unique != "-"]
-        count_ng = dict(zip(unique_ng, counts_ng))
-        maxChar_ng, maxCount_ng = max(count_ng.items(),
-                                      key=operator.itemgetter(1))
-        consensus.append(maxChar_ng)
-    return ("".join(consensus))
+
+def AlignmentArray(seqs):
+    seqs = [list(x.upper()) for x in seqs]
+    arr = np.array(seqs)
+    return (arr)
+
+def IUPAC():
+    '''
+    Make two dictionaries representing the IUPAC characters for ambiguous
+    bases.
+    source: https://droog.gs.washington.edu/parc/images/iupac.html
+
+    Returns
+    -------
+    D1: dict
+        Every IUPAC ambiguity character as keys and lists of all the
+        nucleotides they represent as values.
+    D2: dict
+        Every combination of nucleotides (as strings) as keys and their
+        ambiguity characters as values.
+    '''
+    D1 = {'A': ['A', 'M', 'R', 'W', 'V', 'H', 'D', 'N'],
+          'G': ['G', 'R', 'S', 'K', 'V', 'D', 'B', 'N'],
+          'T': ['T', 'W', 'Y', 'K', 'H', 'D', 'B', 'N'],
+          'C': ['C', 'M', 'S', 'Y', 'V', 'H', 'B', 'N'],
+          'M': ['A', 'C'],
+          'R': ['A', 'G'],
+          'W': ['A', 'T'],
+          'S': ['C', 'G'],
+          'Y': ['C', 'T'],
+          'K': ['G', 'T'],
+          'V': ['A', 'C', 'G'],
+          'H': ['A', 'C', 'T'],
+          'D': ['A', 'G', 'T'],
+          'B': ['C', 'G', 'T'],
+          'N': ['A', 'C', 'T', 'G']}
+    D2 = dict()
+    for key, val in D1.items():
+        if key not in ['A', 'G', 'T', 'C']:
+            for comb in itertools.permutations(val, len(val)):
+                D2["".join(comb)] = key    
+    return (D1, D2)
+
+
+def readCIGAR(cigar):
+    return(re.findall(r'\d+\D*', cigar))
+
+def lengthFromCIGAR(cigar, excludeI=False, excludeD=False):
+    if excludeI:
+        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|D]', cigar)]))
+    if excludeD:
+        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|I]', cigar)]))
+    
+    return(sum([int(x) for x in re.findall(r'\d+', cigar)]))

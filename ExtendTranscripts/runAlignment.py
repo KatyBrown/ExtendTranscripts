@@ -1,7 +1,93 @@
 #!/usr/bin/env python3
 import AlignmentPW
+import UtilityFunctions
+import copy
+import Consensus
 
-def runAlignmentPW(fasta_dict, pD, quick=False, keep_failed=False,
+def runAlignment(fasta_dict, pD, alignment_type='pairwise',
+                 quick=False, keep_failed=False, rename=False):
+    '''
+
+    '''
+    D = dict()
+    if rename:
+        namD = {nam:i for i, nam in enumerate(fasta_dict.keys())}
+        rev_namD = {i:nam for i, nam in enumerate(fasta_dict.keys())}
+    else:
+        namD = None
+        rev_namD = None
+
+    nams = fasta_dict.keys()
+    seqs = fasta_dict.values()
+    Z = sorted(zip(nams, seqs), key=lambda x: len(x[1]))[::-1]
+    
+    if alignment_type == 'pairwise':
+        D = runAlignmentPW(Z, namD, fasta_dict, pD,
+                           quick=quick,
+                           keep_failed=keep_failed,
+                           rename=rename)
+    elif alignment_type == 'stepwise':
+        D = runAlignmentSW(Z, namD, fasta_dict, pD, rename=rename)
+    if rename:
+        return (namD, rev_namD, D)
+    else:
+        return (D)
+
+def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
+    '''
+    '''
+    D = dict()
+    Z = list(Z)
+    query_seq = Z[0][1]
+    X = copy.copy(Z[1:])
+    i = 1
+    done = set([X[0][0]])
+    level = 0
+    consensusD = dict()
+    j = 0
+    while i != len(X):
+        while True:
+            if i >= len(X):
+                break
+            target_seq = X[i][1]
+            result = AlignmentPW.SWalign(query_seq, target_seq,
+                                         pD, useSub=False)
+            length = AlignmentPW.lengthFromCIGAR(result['cigar'])
+            if length >= pD['min_length']:
+                SE = AlignmentPW.findOverlapType(result, query_seq, target_seq,
+                                                 pD, keep_failed=False)
+                if SE:
+                    alignment = AlignmentPW.getAlignmentLocal(result,
+                                                             query_seq,
+                                                             target_seq, pD)
+                    alignment_identity = alignment[2]
+                    if alignment_identity:
+                        result['alignment'] = alignment
+                        full_alignment = AlignmentPW.getAlignmentFull(result,
+                                                                      query_seq,
+                                                                      target_seq,
+                                                                      pD)
+                        done.add(X[i][0])
+                        X = X[:i] + X[i+1:]
+
+                        
+                        ali = Consensus.expandAlignment(result,
+                                                        consensusD, level)
+                        consensusD = Consensus.collapseAlignment(ali,
+                                                                 consensusD,
+                                                                 level)
+                        query_seq = consensusD[level]['consensus']
+                        level += 1
+                        i = 0
+                        break
+            i += 1
+    D[j] = dict()
+    D[j]['consensus'] = consensusD[level-1]['consensus']
+    D[j]['alignment'] = consensusD[level-1]['alignment']
+    return (D)
+        
+    
+def runAlignmentPW(Z, namD, fasta_dict, pD, quick=False, keep_failed=False,
                    rename=False):
     '''
     Runs SWalign on every pair of sequences in a Fasta file converted to
@@ -37,17 +123,6 @@ def runAlignmentPW(fasta_dict, pD, quick=False, keep_failed=False,
     
     '''
     D = dict()
-    if rename:
-        namD = {nam:i for i, nam in enumerate(fasta_dict.keys())}
-        rev_namD = {i:nam for i, nam in enumerate(fasta_dict.keys())}
-    else:
-        namD = None
-        rev_namD = None
-
-    nams = fasta_dict.keys()
-    seqs = fasta_dict.values()
-    Z = sorted(zip(nams, seqs), key=lambda x: len(x[1]))[::-1]
-    
     for i, (N1, S1) in enumerate(Z):
         for j, (N2, S2) in enumerate(Z[i+1:]):
             if len(S2) > len(S1):
@@ -68,10 +143,10 @@ def runAlignmentPW(fasta_dict, pD, quick=False, keep_failed=False,
                 SE = AlignmentPW.findOverlapType(result, query_seq, target_seq,
                                                  pD, keep_failed=keep_failed)
                 if SE:
-                    alignment = AlignmentPW.getAlignment(result,
-                                                         query_seq,
-                                                         target_seq, pD,
-                                                         keep_failed=keep_failed)
+                    alignment = AlignmentPW.getAlignmentLocal(result,
+                                                             query_seq,
+                                                             target_seq, pD,
+                                                             keep_failed=keep_failed)
                     alignment_identity = alignment[2]
                     if alignment_identity or keep_failed:
                         result['SE'] = SE
@@ -92,7 +167,4 @@ def runAlignmentPW(fasta_dict, pD, quick=False, keep_failed=False,
                             else:
                                 D.setdefault(target_nam, dict())
                                 D[target_nam][query_nam] = result
-    if rename:
-        return (namD, rev_namD, D)
-    else:
-        return (D)
+    return (D)
