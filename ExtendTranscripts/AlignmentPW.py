@@ -38,6 +38,7 @@ def subMatrixIUPAC(match_score, mismatch_score):
                 scoreD[base1][base2] = mismatch_score
     return (scoreD)
 
+
 def SWalign(seq1, seq2, pD, useSub=False):
     '''
     Aligns two sequences using the StripedSmithWaterman algorithm
@@ -110,31 +111,28 @@ def alignFromCIGAR(seq1, seq2, cigar):
     if cigar == "%sM" % UtilityFunctions.lengthFromCIGAR(cigar):
         return (seq1, seq2)
     cigar_L = UtilityFunctions.readCIGAR(cigar)
-    s1 = []
-    s2 = []
+    s1 = ""
+    s2 = ""
     n1 = 0
     n2 = 0
     for cig in cigar_L:
         typ = cig[-1]
         count = int(cig[:-1])
-        for i in range(count):
-            if typ == "M":
-                s1.append(seq1[n1])
-                s2.append(seq2[n2])
-                n1 += 1
-                n2 += 1
-            elif typ == "I":
-                s1.append(seq1[n1])
-                s2.append("-")
-                n1 += 1
-            elif typ == "D":
-                s1.append("-")
-                s2.append(seq2[n2])
-                n2 += 1
-            else:
-                print (typ)
-    s1 = "".join(s1)
-    s2 = "".join(s2)
+        if typ == 'M':
+            s1 += seq1[n1:(n1 + count)]
+            s2 += seq2[n2:(n2 + count)]
+            n1 += count
+            n2 += count
+        elif typ == 'I' or typ == "Y":
+            s1 += seq1[n1:(n1 + count)]
+            s2 += '-' * count
+            n1 += count
+        elif typ == 'D' or typ == "X":
+            s1 += '-' * count
+            s2 += seq2[n2:n2 + count]
+            n2 += count
+        else:
+            print(typ)
     if (len(s1) != len(s2)):
         raise RuntimeError ("Aligned sequences are not the same length.")
     return (s1, s2)
@@ -215,11 +213,11 @@ def findOverlapType(result, query_seq, target_seq, pD, keep_failed=False):
     return (start_type, end_type)
 
 
-def getAlignmentLocal(result, query_seq, target_seq, pD, keep_failed=False):
+def getAlignmentLocal(result, query_seq, target_seq, pD):
     
     Q_subseq = query_seq[result['query_start']:result['query_end']]
     T_subseq = target_seq[result['target_start']:result['target_end']]
-    
+
     Q_subseq, T_subseq = alignFromCIGAR(Q_subseq, T_subseq, result['cigar'])
     
     alignment_length = UtilityFunctions.lengthFromCIGAR(result['cigar'])
@@ -227,7 +225,7 @@ def getAlignmentLocal(result, query_seq, target_seq, pD, keep_failed=False):
     T_subseq = np.array(list(T_subseq))
     
     ident = sum(Q_subseq == T_subseq) / alignment_length
-    if ident >= pD['min_perc_ident'] or keep_failed:
+    if ident >= pD['min_perc_ident']:
         return(Q_subseq, T_subseq, ident)
     else:
         return (None, None, None)
@@ -249,7 +247,10 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
     if Q_start_nclipped == 0 or T_start_nclipped == 0:
         start_cigar_start = ""
     else:
-        start_cigar_start = "%iX" % (min(Q_start_nclipped, T_start_nclipped))
+        if Q_start_nclipped < T_start_nclipped:
+            start_cigar_start = "%iY" % (Q_start_nclipped)
+        else:
+            start_cigar_start = "%iX" % (T_start_nclipped)
 
     if T_start_nclipped >= Q_start_nclipped:
         if T_start_nclipped == 0:
@@ -262,7 +263,10 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
     if Q_end_nclipped == 0 or T_end_nclipped == 0:
         end_cigar_end = ""
     else:
-        end_cigar_end = "%iX" % (min(Q_end_nclipped, T_end_nclipped))
+        if Q_end_nclipped < T_end_nclipped:
+            end_cigar_end = "%iY" % (Q_end_nclipped)
+        else:
+            end_cigar_end = "%iX" % (T_end_nclipped)
     if T_end_nclipped >= Q_end_nclipped:
         if T_end_nclipped == 0:
             end_cigar = "%s" % end_cigar_end
@@ -270,21 +274,14 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
             end_cigar = "%iD%s" % (T_end_nclipped, end_cigar_end)
     else:
         end_cigar = "%iI%s" % (Q_end_nclipped, end_cigar_end)
-        
     cigar_updated = "%s%s%s" % (start_cigar, result['cigar'], end_cigar)
-    
     fullseqQ = Qpad_start + query_seq[:result['query_start']] + subseqQ + query_seq[result['query_end']:] + Qpad_end
     fullseqT = Tpad_start + target_seq[:result['target_start']] + subseqT + target_seq[result['target_end']:] + Tpad_end
     result['query_seq_aligned'] = fullseqQ
     result['target_seq_aligned'] = fullseqT
     if len(fullseqT) != len(fullseqQ):
         raise RuntimeError ("Aligned sequences are not the same length")
-    if UtilityFunctions.lengthFromCIGAR(cigar_updated) != len(fullseqQ):
-        print (cigar_updated, Q_start_nclipped, T_start_nclipped)
-        print (fullseqQ)
-        print (len(fullseqQ))
-        print (UtilityFunctions.lengthFromCIGAR(cigar_updated))
-        raise RuntimeError ("oh no")
+    assert UtilityFunctions.lengthFromCIGAR(cigar_updated) == len(fullseqQ), "CIGAR length is not consistent with sequence length"
     result['cigar_updated'] = cigar_updated
 
     return(result)

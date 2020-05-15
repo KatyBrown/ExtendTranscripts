@@ -87,13 +87,37 @@ def IUPAC():
     return (D1, D2)
 
 
+def reverseComplement(seq):
+    '''
+    Reverse complements a sequence
+
+    Parameters
+    ----------
+    seq: str
+        single string containing the sequence
+
+    Returns
+    -------
+    str
+        string containing the reverse complement of the sequence
+    '''
+    rcdict = {"A":"T", "C":"G", "T":"A", "G":"C", "N":"N", "Y": "R",
+              "K": "M", "R": "Y", "M":"K", "B":"V", "V": "B", "D": "H",
+              "H": "D", "W": "W", "S": "S"}
+    seq = list(seq)[::-1]
+    seq = [rcdict[s] for s in seq]
+    seq = "".join(seq)
+    return (seq)
+
+
 def readCIGAR(cigar):
     return(re.findall(r'\d+\D*', cigar))
 
-def lengthFromCIGAR(cigar, excludeI=False, excludeD=False):
+def lengthFromCIGAR(cigar, excludeI=False, excludeD=False, mOnly=False):
     if excludeI:
         return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|D]', cigar)]))
     if excludeD:
         return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|I]', cigar)]))
-    
+    if mOnly:
+        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M]', cigar)]))
     return(sum([int(x) for x in re.findall(r'\d+', cigar)]))
