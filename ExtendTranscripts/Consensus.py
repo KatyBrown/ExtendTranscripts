@@ -2,7 +2,7 @@
 import numpy as np
 import UtilityFunctions
 
-def makeAlignmentMatrix(sequence):
+def makeAlignmentMatrix(alignment):
     '''
     Make a matrix which will be used to record the details of the current
     alignment.  Each row is a nucleotide (including IUPAC nts) and each
@@ -18,11 +18,14 @@ def makeAlignmentMatrix(sequence):
     nt_inds = dict((n, i) for i, n in enumerate(nts))
     # create an empty matrix with one row, plus one column for each nt in
     # the sequence
+    sequence = alignment[0,:]
     alignment_tab = np.zeros((len(nts), len(sequence)))
     # fill in the matrix with the nts in the first sequence
-    for col, char in enumerate(sequence):
-        nt_ind = nt_inds[char]
-        alignment_tab[nt_ind, col] += 1
+    for i in range(np.shape(alignment)[0]):
+        sequence = alignment[i,:]
+        for col, char in enumerate(sequence):
+            nt_ind = nt_inds[char]
+            alignment_tab[nt_ind, col] += 1
     return (alignment_tab, nt_inds)
 
 

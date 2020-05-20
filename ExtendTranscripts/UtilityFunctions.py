@@ -103,7 +103,7 @@ def reverseComplement(seq):
     '''
     rcdict = {"A":"T", "C":"G", "T":"A", "G":"C", "N":"N", "Y": "R",
               "K": "M", "R": "Y", "M":"K", "B":"V", "V": "B", "D": "H",
-              "H": "D", "W": "W", "S": "S"}
+              "H": "D", "W": "W", "S": "S", "-": "-"}
     seq = list(seq)[::-1]
     seq = [rcdict[s] for s in seq]
     seq = "".join(seq)

@@ -89,20 +89,30 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
     # from X as they are assigned to a group
     X = copy.copy(Z)
     D = dict()
-    iscons = 0
+    prevlen = len(X) + 1
     # keep running until there are no sequences left
-    while len(done) < len(Z) and len(X) > 1 and len(X) != iscons:
+    while len(done) < len(Z) and len(X) > 1 and len(X) < prevlen:
+        print (j, len(X), prevlen)
+        prevlen = len(X)
         # the query sequence is the current consensus - start off with the longest
         # sequence in the input
         query_seq = X[0][1]
-        matrix, nt_inds = Consensus.makeAlignmentMatrix(query_seq)
+        query_nam = X[0][0]
+        print (query_nam)
+        if "consensus" not in query_nam:
+            print ("1")
+            p_ali = UtilityFunctions.AlignmentArray([query_seq])
+        else:
+            print ("2")
+            consensus_n = int(X[0].replace("consensus_", ""))
+            p_ali = D[consensus_n]['alignment']
+        matrix, nt_inds = Consensus.makeAlignmentMatrix(p_ali)
         X = X[1:]
         i = 0
         groupdone = list([X[0][0]])
         done = done | set(groupdone)
         level = 0
         consensusD = dict()
-        X = X[1:]
         # keep starting at the top again with the new consensus sequence
         while i != len(X):
             # Run through all the remaining sequences not in the consensus
@@ -135,7 +145,6 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
                     done.add(X[i][0])
                     # this sequence has been assigned - remove it from X
                     X = X[:i] + X[i+1:]
-
                     ali, matrix = Consensus.expandAlignment(result,
                                                             matrix,
                                                             nt_inds,
@@ -153,12 +162,12 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
                     break
                 i += 1
         D[j] = dict()
+        print (consensusD)
         if level != 0:
             D[j]['consensus'] = consensusD[level-1]['consensus']
             D[j]['alignment'] = consensusD[level-1]['alignment']
             D[j]['names'] = groupdone
             X.append(("%s_consensus" % j, consensusD[level-1]['consensus']))
-            iscons += 1
         else:
             D[j]['consensus'] = query_seq
             D[j]['alignment'] = None
