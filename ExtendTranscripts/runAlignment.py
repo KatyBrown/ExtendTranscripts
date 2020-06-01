@@ -4,6 +4,7 @@ import UtilityFunctions
 import copy
 import Consensus
 import numpy as np
+import math
 
 
 def runAlignment(fasta_dict, pD, alignment_type='pairwise',
@@ -56,12 +57,21 @@ def alignmentMeetsCriteria(result, query_seq, target_seq, pD):
     # check the length of the aligned region
     length = UtilityFunctions.lengthFromCIGAR(result['cigar'])
     # this is quickest - if it's too short dont' check anything
+    if pD['alignment_length_min_n']:
+        min_length_Q, min_length_T = pD['alignment_length_min_n'], pD['alignment_length_min_n']
+    else:
+        min_length_Q = math.ceil(pD['alignment_length_min_perc'] * len(query_seq))
+        min_length_T = math.ceil(pD['alignment_length_min_perc'] * len(target_seq))
     # else
-    if length >= pD['min_length']:
+    if length >= min_length_T and length >= min_length_Q:
         wo_indels = UtilityFunctions.lengthFromCIGAR(result['cigar'],
                                                      mOnly=True)
         indels = wo_indels / length
-        if indels > (1 - pD['max_indels']):
+        if pD['alignment_indels_max_n']:
+            max_indels = pD['alignment_indels_max_n']
+        else:
+            max_indels = math.ceil(pD['alignment_indels_max_perc'] * length)
+        if indels > (1 - max_indels):
             # check how the sequences overlap - the aligned region
             # needs to either include the end of a sequence or 
             
@@ -69,8 +79,8 @@ def alignmentMeetsCriteria(result, query_seq, target_seq, pD):
                                              pD, keep_failed=False)
             if SE:
                 alignment = AlignmentPW.getAlignmentLocal(result,
-                                                         query_seq,
-                                                         target_seq, pD)
+                                                          query_seq,
+                                                          target_seq, pD)
                 alignment_identity = alignment[2]
                 if alignment_identity:
                     return (True, alignment)
@@ -110,7 +120,7 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, seqdict, rename=False):
             p_ali = UtilityFunctions.AlignmentArray([query_seq])
             iscons = False
         else:
-            consensus_n = int(X[0].replace("consensus_", ""))
+            consensus_n = int(query_nam.replace("_consensus", ""))
             p_ali = D[consensus_n]['alignment']
             iscons = True
         matrix, nt_inds = Consensus.makeAlignmentMatrix(p_ali)

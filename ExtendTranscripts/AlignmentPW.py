@@ -50,20 +50,21 @@ def gappedToUngapped(row, removed_pos):
         # represents it's index in the unaligned sequence
         this_row_ind = non_gap_ind[removed_pos]
         # remove duplicates
-        this_row_ind = np.unique(sorted(this_row_ind))        
-        
-        # find runs with a difference between indices of 1 - these are
-        # consecutive residues
-        # add one because we want to split after these indices
-        split_loc = np.where(np.diff(sorted(this_row_ind)) == 1)[0] + 1
-        # split the array where there are non-consecutive indices
-        continuous = np.split(this_row_ind,  split_loc)
-        for c in continuous:
-            # this is the piece of sequence which has been clipped out
-            substring = "".join(row_ng[c[0]:c[-1] + 1])
-            # store a list of the positions which have been clipped out
-            # and the sequence which they contained
-            result.append((list(c), substring))
+        this_row_ind = sorted(np.unique(this_row_ind))
+        current_L = [0]
+        prev_r = this_row_ind[0]
+        i = 1
+        for r in this_row_ind[1:]: 
+            if r - prev_r == 1:
+                current_L.append(i)
+            else:
+                substring = "".join(row_ng[current_L[0]:current_L[-1] + 1])
+                result.append((current_L, substring))
+                current_L = [i]
+            prev_r = r
+            i += 1
+        substring = "".join(row_ng[current_L[0]:current_L[-1] + 1])
+        result.append((current_L, substring))
     return (result)
 
     
@@ -103,7 +104,6 @@ def updateSeqDict(orig_arr, nams, logD, seqdict):
     # These steps need to be performed in the same order they were originally
     # carried out, as the positions in the final sequences will change after
     # each step.
-    print (logD)
     for function in logD['order']:
         # Check if anything was removed by this function in this alignment
         if len(logD[function]) != 0:
@@ -294,19 +294,19 @@ def SWalign(seq1, seq2, pD, useSub=False):
         http://genome.sph.umich.edu/wiki/SAM
     '''   
     if useSub:
-        subs = UtilityFunctions.subMatrixIUPAC(pD['match_score'],
-                                               pD['mismatch_score'])
+        subs = UtilityFunctions.subMatrixIUPAC(pD['alignment_match_score'],
+                                               pD['alignment_mismatch_score'])
         
-        ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['gap_open'],
-                                   gap_extend_penalty=pD['gap_extend'],
-                                   match_score=pD['match_score'],
-                                   mismatch_score=pD['mismatch_score'],
+        ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['alignment_gap_open'],
+                                   gap_extend_penalty=pD['alignment_gap_extend'],
+                                   match_score=pD['alignment_match_score'],
+                                   mismatch_score=pD['alignment_mismatch_score'],
                                    substitution_matrix=subs)(seq2)
     else:
-        ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['gap_open'],
-                                   gap_extend_penalty=pD['gap_extend'],
-                                   match_score=pD['match_score'],
-                                   mismatch_score=pD['mismatch_score'])(seq2)
+        ali = StripedSmithWaterman(seq1, gap_open_penalty=pD['alignment_gap_open'],
+                                   gap_extend_penalty=pD['alignment_gap_extend'],
+                                   match_score=pD['alignment_match_score'],
+                                   mismatch_score=pD['alignment_mismatch_score'])(seq2)
 
     aliD = {'optimal_alignment_score': ali.optimal_alignment_score,
             'query_start': ali.query_begin,
@@ -374,11 +374,11 @@ def findOverlapType(result, query_seq, target_seq, pD, keep_failed=False):
      Q_end_nclipped, T_end_nclipped) = getClips(result, query_seq,
                                                 target_seq)
     
-    if pD['clip_perc']:
-        max_clip_Q = math.ceil(pD['clip_perc'] * len(query_seq))
-        max_clip_T = math.ceil(pD['clip_perc'] * len(target_seq))
+    if pD['alignment_clip_max_n']:
+        max_clip_Q, max_clip_T = pD['alignment_clip_max_n'], pD['alignment_clip_max_n']
     else:
-        max_clip_Q, max_clip_T = pD['max_clip'], pD['max_clip']
+        max_clip_Q = math.ceil(pD['alignment_clip_max_perc'] * len(query_seq))
+        max_clip_T = math.ceil(pD['alignment_clip_max_perc'] * len(target_seq))
 
     # If the starts of both sequences are clipped there is a mismatched region
     if Q_start_nclipped > max_clip_Q and T_start_nclipped > max_clip_T:
@@ -438,8 +438,13 @@ def getAlignmentLocal(result, query_seq, target_seq, pD):
     Q_subseq = np.array(list(Q_subseq))
     T_subseq = np.array(list(T_subseq))
     
-    ident = sum(Q_subseq == T_subseq) / alignment_length
-    if ident >= pD['min_perc_ident']:
+    ident = sum(Q_subseq == T_subseq)
+    if pD['alignment_ident_min_n']:
+        min_ident = pD['alignment_ident_min_n']
+    else:
+        min_ident = math.ceil(pD['alignment_ident_min_perc'] * alignment_length)
+    
+    if ident >= min_ident:
         return(Q_subseq, T_subseq, ident)
     else:
         return (None, None, None)
