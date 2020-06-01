@@ -4,8 +4,222 @@ import numpy as np
 import math
 import UtilityFunctions
 import Consensus
+import sys
+sys.path.insert(0, "/home/katy/CIAlign_P")
+import CIAlign.parsingFunctions
 
+def gappedToUngapped(row, removed_pos):
+    '''
+    Takes an aligned sequence (with gaps) and a set of indices of residues
+    which have been removed from this sequence, and returns the indicies of
+    the residues within the same sequence but
+    unaligned (without gaps).  Indices which correspond to gaps in the input
+    sequence are excluded.
+    Returns a list of tuples. In each of these tuples, tuple[0] is a list of
+    adjacent positions (in the unaligned original sequence) which
+    have been removed and tuple[1] is a string containing the part
+    of the sequence which has been removed.
+    
+    Parameters
+    ----------
+    row: np.array
+        numpy array containing the aligned sequence
+    removed_pos: np.array
+        numpy array containing the positions which were removed from the
+        aligned sequence
+    
+    Returns
+    -------
+    result: list
+        list of tuples showing which positions have been removed from the
+        unaligned sequence and which residues were at these positions.
+    
+    '''
+    # Make a True / False array of non-gap positions
+    non_gap_pos = row != "-"
+    # Make an np.array of row with gaps removed
+    row_ng = row[non_gap_pos]
+    result = []
+    # We are only interested when non-gap residues have been removed
+    if sum(non_gap_pos[removed_pos]) != 0:
+        # find the indices in the gap-free sequence of the
+        # removed residues
+        # np.cumsum counts the number of non-gap residues before each position
+        non_gap_ind = np.cumsum(non_gap_pos)
+        # find how many non-gap residues precede each removed position - this
+        # represents it's index in the unaligned sequence
+        this_row_ind = non_gap_ind[removed_pos]
+        # remove duplicates
+        this_row_ind = np.unique(sorted(this_row_ind))        
+        
+        # find runs with a difference between indices of 1 - these are
+        # consecutive residues
+        # add one because we want to split after these indices
+        split_loc = np.where(np.diff(sorted(this_row_ind)) == 1)[0] + 1
+        # split the array where there are non-consecutive indices
+        continuous = np.split(this_row_ind,  split_loc)
+        for c in continuous:
+            # this is the piece of sequence which has been clipped out
+            substring = "".join(row_ng[c[0]:c[-1] + 1])
+            # store a list of the positions which have been clipped out
+            # and the sequence which they contained
+            result.append((list(c), substring))
+    return (result)
 
+    
+def updateSeqDict(orig_arr, nams, logD, seqdict):
+    '''
+    Records which parts of the original sequences have been clipped out
+    using CIAlign when refining a consensus sequence.
+    
+    Parameters
+    ----------
+    orig_arr: np.array
+        The original array on which CIAlign was run
+    nams: list
+        A list of sequence names in the same order as orig_arr
+    logD: dict
+        A dictionary containing the CIAlign log for each function - for
+        crop_ends this is another dictionary where keys are sequence names
+        and vals are the indicies of residues which have been replaced with
+        gaps, for remove_insertions and remove_gaponly these are sets
+        of the indicies of columns which have been removed.  These are all
+        relative positions - the position in the original alignment (orig_arr),
+        rather than the position at this point in processing.
+    seqdict: dict
+        A dictionary with any processing previously perfomed on any sequences.
+    
+    Returns
+    -------
+    seqdict: dict
+        An updated dictionary where keys are sequence IDs and values are
+        dictionaries, within these dictionaries keys are CIAlign function
+        names and values are lists of tuples.
+        In each of these tuples, tuple[0] is a list of adjacent positions
+        (in the unaligned original sequence) which have been removed using
+        this CIAlign function and tuple[1] is a string containing the part
+        of the sequence which has been removed.
+    '''
+    # These steps need to be performed in the same order they were originally
+    # carried out, as the positions in the final sequences will change after
+    # each step.
+    print (logD)
+    for function in logD['order']:
+        # Check if anything was removed by this function in this alignment
+        if len(logD[function]) != 0:
+            # log for remove_insertions function
+            if function == 'remove_insertions':
+                # sort the list of positions which were removed
+                removed_pos = sorted(np.array(list(logD[function])))
+                for i, row in enumerate(orig_arr):
+                    nam = nams[i]
+                    # find  the location of the removed residues in the
+                    # ungapped sequence and the piece of sequence
+                    # which has been removed
+                    result = gappedToUngapped(row, removed_pos)
+                    if len(result) != 0:
+                        # store this result in seqdict
+                        seqdict.setdefault(nam, dict())
+                        seqdict[nam][function] = result
+
+            elif function == 'crop_ends':
+                cropped = logD[function]
+                for seqnam in cropped:
+                    seqdict.setdefault(seqnam, dict())
+                    row_ind = nams.index(seqnam)
+                    row = orig_arr[row_ind, :]
+                    removed_pos = np.concatenate(cropped[seqnam])
+                    result = gappedToUngapped(row, removed_pos)
+                    seqdict[seqnam][function] = result
+    return(seqdict)
+                        
+    
+    
+    
+def cleanAlignmentCIAlign(arr,
+                          nams,
+                          consensus, matrix, nt_inds, seqdict,
+                          functions=['remove_insertions',
+                                     'crop_ends',
+                                     'remove_gaponly']):
+
+    # make a list of integers - one for each postiion
+    # this is used to keep track of which positions from the input alignment
+    # have been removed - as after columns and rows are removed the indices
+    # change
+    relativePositions = list(range(0, len(arr[0])))
+    # dictionary to keep track of what has been removed
+    logD = dict()
+    logD['order'] = functions
+    # make a copy of the input array
+    orig_arr = arr
+    # these will always be run in the same order for now but might as
+    # well make it possible to change the order in case it's needed later
+    for function in functions:
+        # check there's no weird functions in there
+        assert function in ['remove_insertions',
+                            'crop_ends',
+                            'remove_gaponly'], "CIAlign function %s not found" % function
+        if function == "remove_insertions":
+            # store the previous set of indices
+            p_relative = np.array(relativePositions)
+            # run the CIAlign remove insertions function
+            # returns a cleaned array and a  list of removed positions
+            # only small insertions are removed - there shouldn't be big
+            # ones using this alignment method
+            arr, r, relativePositions = CIAlign.parsingFunctions.removeInsertions(arr,
+                                                                                  relativePositions,
+                                                                                  logtype='dict',
+                                                                                  min_size=1,
+                                                                                  max_size=10)
+            # convert the removed positions to an np.array so they can be
+            # used as an index
+            removed_relative = np.array(list(r))
+            # find out which postions in the original alignment these
+            # correspond to
+            keep_absolute = np.where(np.invert(np.in1d(p_relative, removed_relative)))[0]
+            matrix = matrix[:, keep_absolute]
+
+        elif function == "crop_ends":
+            # store the previous set of indices
+            p_relative = np.array(relativePositions)
+            # store the input array
+            p_arr = arr
+            # run the CIAlign crop ends function
+            # returns a cleaned array and a dictionary where keys are
+            # sequence IDs and vals are tuples - tuple[0] is the positions
+            # removed (replaced with "-") at the beginning
+            # and tuple[1] is the positions removed from the end
+            arr, r = CIAlign.parsingFunctions.cropEnds(arr, nams,
+                                                       relativePositions,
+                                                       logtype='dict')
+            # iterate through the dictionary
+            for nam in r:
+                cs, ce = r[nam]
+                rm_absolute_cs = np.where(np.in1d(p_relative, cs))[0]
+                rm_absolute_ce = np.where(np.in1d(p_relative, ce))[0]
+                rm_absolute = np.concatenate((rm_absolute_cs, rm_absolute_ce))
+                row_index = nams.index(nam)
+                this_row = p_arr[row_index,:]
+                rm_nucs = this_row[rm_absolute]
+                nuc_inds = np.array([nt_inds[x] for x in rm_nucs])
+                matrix[nuc_inds, rm_absolute] -= 1
+                
+        elif function == "remove_gaponly":
+            p_relative = np.array(relativePositions)
+            arr, r, relativePositions = CIAlign.parsingFunctions.removeGapOnly(arr,
+                                                                               relativePositions,
+                                                                               logtype='dict')
+            removed_relative = np.array(list(r))
+            keep_absolute = np.where(np.invert(np.in1d(p_relative, removed_relative)))[0]
+            matrix = matrix[:, keep_absolute]
+    
+        logD[function] = r
+    consensus = Consensus.collapseAlignment(matrix, nt_inds)
+    seqdict = updateSeqDict(orig_arr, nams, logD, seqdict)
+    return (arr, matrix, consensus, seqdict)
+
+    
 def subMatrixIUPAC(match_score, mismatch_score):
     '''
     Generates a substitution matrix for the SWalign algorithm where

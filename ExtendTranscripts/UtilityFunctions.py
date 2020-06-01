@@ -2,7 +2,7 @@
 import numpy as np
 import re
 import itertools
-def FastaToDict(infile):
+def FastaToDict(infile, rna=False):
     '''
     Converts a fasta file to a dictionary
     

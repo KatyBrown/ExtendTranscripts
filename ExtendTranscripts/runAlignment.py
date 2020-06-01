@@ -5,6 +5,7 @@ import copy
 import Consensus
 import numpy as np
 
+
 def runAlignment(fasta_dict, pD, alignment_type='pairwise',
                  quick=False, rename=False):
     '''
@@ -20,6 +21,8 @@ def runAlignment(fasta_dict, pD, alignment_type='pairwise',
 
     nams = fasta_dict.keys()
     seqs = fasta_dict.values()
+    seqdict = dict()
+    
     Z = sorted(zip(nams, seqs), key=lambda x: len(x[1]))[::-1]
     
     if alignment_type == 'pairwise':
@@ -27,7 +30,12 @@ def runAlignment(fasta_dict, pD, alignment_type='pairwise',
                            quick=quick,
                            rename=rename)
     elif alignment_type == 'stepwise':
-        D = runAlignmentSW(Z, namD, fasta_dict, pD, rename=rename)
+        D = runAlignmentSW(Z,
+                           namD,
+                           fasta_dict,
+                           pD,
+                           seqdict,
+                           rename=rename)
     if rename:
         return (namD, rev_namD, D)
     else:
@@ -79,7 +87,7 @@ def alignmentMeetsCriteria(result, query_seq, target_seq, pD):
         return (False, )
                 
     
-def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
+def runAlignmentSW(Z, namD, fasta_dict, pD, seqdict, rename=False):
     '''
     '''
     done = set([Z[0][0]])
@@ -98,14 +106,13 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
         # sequence in the input
         query_seq = X[0][1]
         query_nam = X[0][0]
-        print (query_nam)
         if "consensus" not in query_nam:
-            print ("1")
             p_ali = UtilityFunctions.AlignmentArray([query_seq])
+            iscons = False
         else:
-            print ("2")
             consensus_n = int(X[0].replace("consensus_", ""))
             p_ali = D[consensus_n]['alignment']
+            iscons = True
         matrix, nt_inds = Consensus.makeAlignmentMatrix(p_ali)
         X = X[1:]
         i = 0
@@ -162,20 +169,33 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, rename=False):
                     break
                 i += 1
         D[j] = dict()
-        print (consensusD)
         if level != 0:
-            D[j]['consensus'] = consensusD[level-1]['consensus']
-            D[j]['alignment'] = consensusD[level-1]['alignment']
+            ali, matrix, consensus, seqdict = AlignmentPW.cleanAlignmentCIAlign(ali,
+                                                                                groupdone,
+                                                                                consensus,
+                                                                                matrix,
+                                                                                nt_inds,
+                                                                                seqdict)
+            D[j]['consensus'] = consensus
+            D[j]['alignment'] = ali
             D[j]['names'] = groupdone
-            X.append(("%s_consensus" % j, consensusD[level-1]['consensus']))
+            D[j]['log'] = seqdict
+            if len(X) != 0 and (iscons is False or
+                  np.shape(ali) != np.shape(p_ali)):
+                    X.append(("%s_consensus" % j,
+                              consensusD[level-1]['consensus']))
         else:
             D[j]['consensus'] = query_seq
             D[j]['alignment'] = None
+            D[j]['names'] = None
+            D[j]['log'] = None
         j += 1
-    if len(X) != 0:
+    if len(X) == 1:
         D[j] = dict()
         D[j]['consensus'] = X[0][1]
         D[j]['alignment'] = None
+        D[j]['names'] = None
+        D[j]['log'] = None
     return (D)
         
     
