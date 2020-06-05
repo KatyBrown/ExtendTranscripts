@@ -4,6 +4,7 @@ import UtilityFunctions
 import copy
 import Consensus
 from UtilityFunctions import logPrint as lp
+import os
 
 
 def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
@@ -27,7 +28,6 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
                            fasta_dict,
                            pD,
                            seqdict)
-    writeFastas(D, outdir)
     return (D)
 
 
@@ -51,129 +51,34 @@ def runAlignmentSW(Z, fasta_dict, pD, seqdict):
     D = dict()
     k = 0
     while len(done) < len(Z) and len(X) > 1:
-        # We will make this True if something changes
-        query_nam, current_consensus = X[0]
+        current = dict()
+        current['name'], current['consensus'] = X[0]
+        current['names'] = [current['name']]
         lp("Remaining unaligned sequences %i" % (len(X)), 2, pD)
-        lp("Starting new cluster with %s" % (query_nam), 2, pD)
 
-        # if the query is a previous consensus sequence
-        if "*consensus" in query_nam:
-            query_cons_ind = int(query_nam.split("_")[0])
-            current_alignment = D[query_cons_ind]['alignment']
-            current_names = D[query_cons_ind]['names']
-        else:
-            current_alignment = UtilityFunctions.AlignmentArray(
-                    [current_consensus])
-            current_names = [query_nam]
         # convert the query alignment into a matrix
-        current_mat, nt_inds = Consensus.makeAlignmentMatrix(
-                current_alignment)
+
+        current['alignment'] = UtilityFunctions.AlignmentArray(
+            [current['consensus']])
+
+        current['matrix'], current['nt_inds'] = Consensus.makeAlignmentMatrix(
+                                                current['alignment'])
+
+        current['seqdict'] = seqdict
         # remove the query sequence from X
         X = X[1:]
-        # keep track of position in X
-        j = 0
-        # while we are not at the bottom of x
-        while j != len(X) and len(X) != 0:
-            i = 0
-            any_matches_inner = False
-            n_new = 0
-            # until we find a match and change the query sequence
-            while True and i != len(X):
-                query_seq = current_consensus
-                query_ali = current_alignment
-                query_names = current_names
-                target_nam, target_seq = X[i]
+        consensusD = dict()
+        # Build a cluster based on the current query sequence
+        X, C = Alignment.buildCluster(X, current, consensusD, pD, k)
 
-                if "*consensus" in target_nam:
-                    target_cons_ind = int(target_nam.split("_")[0])
-                    target_ali = D[target_cons_ind]['alignment']
-                    target_names = D[target_cons_ind]['names']
-                else:
-                    target_ali = UtilityFunctions.AlignmentArray([target_seq])
-                    target_names = [target_nam]
-
-                lp("Testing %s" % ", ".join(target_names), 3, pD)
-                # Align the query and target consensus sequences
-                result = Alignment.SWalign(query_seq, target_seq,
-                                           pD, useSub=False)
-
-                # Check the if the consensus sequences are a good match
-                is_match = Alignment.alignmentMeetsCriteria(result, query_seq,
-                                                            target_seq, pD)
-                # if they are not try the reverse complement
-
-                if not is_match[0]:
-                    target_seq = UtilityFunctions.reverseComplement(target_seq)
-                    result = Alignment.SWalign(query_seq, target_seq,
-                                               pD, useSub=False)
-                    is_match = Alignment.alignmentMeetsCriteria(result,
-                                                                query_seq,
-                                                                target_seq,
-                                                                pD)
-                    ####################
-                    UtilityFunctions.reverseComplementAlignment(target_ali)
-                    target_ali = UtilityFunctions.AlignmentArray([target_seq])
-                    for nam in target_names:
-                        seqdict[nam]['is_rc'] = True
-
-                if is_match[0]:
-                    lp("Match found.", 3, pD)
-                    # We found a match - something has changed
-                    any_matches_inner = True
-                    n_new += 1
-                    # remove the current value from X
-                    X = X[:i] + X[i+1:]
-                    result['alignment'] = is_match[1]
-                    # get the full alignment for the two consensus sequences
-                    result = Alignment.getAlignmentFull(result,
-                                                        query_seq,
-                                                        target_seq,
-                                                        pD)
-                    current_names = query_names + target_names
-
-                    lp("Expanding current alignment to include %s" % (
-                            ", ".join(target_names)), 3, pD)
-                    ali, current_mat = Consensus.expandAlignment(result,
-                                                                 query_ali,
-                                                                 target_ali,
-                                                                 current_mat,
-                                                                 nt_inds)
-                    # make a new sequence based on the new alignment
-                    current_consensus = Consensus.collapseAlignment(
-                            current_mat, nt_inds)
-                    current_alignment = ali
-                    i = 0
-                    # now you have a match and the consensus is updated,
-                    # start at the top again
-                    break
-                else:
-                    lp("No match.", 3, pD)
-                # keep going through the other sequences
-                i += 1
-            j += 1
-            done = done | set(current_names)
-            if any_matches_inner:
-                # if anything has changed, clean up the alignment etc
-                lp("Cluster %i updated - %s sequences" % (k,
-                                                          len(current_names)),
-                   2, pD)
-                lp("Cleaning cluster %i with CIAlign" % (k), 3, pD)
-                R = Alignment.cleanAlignmentCIAlign(ali,
-                                                    current_names,
-                                                    query_seq,
-                                                    current_mat,
-                                                    nt_inds,
-                                                    seqdict)
-                current_alignment, current_mat, current_consensus, seqdict = R
-            else:
-                break
         D.setdefault(k, dict())
-        lp("Saved cluster %i with %s sequences" % (k, len(current_names)),
+        lp("Saved cluster %i with %s sequences" % (k, len(C['current_names'])),
            1, pD)
-        D[k]['consensus'] = current_consensus
-        D[k]['alignment'] = current_alignment
-        D[k]['names'] = current_names
-        D[k]['log'] = seqdict
+        D[k]['consensus'] = C['current_consensus']
+        D[k]['alignment'] = C['current_alignment']
+        D[k]['names'] = C['current_names']
+        D[k]['log'] = C['seqdict']
+        writeFastas(D[k], k, 1, pD['outdir'])
         k += 1
     if len(X) == 1:
         D.setdefault(k, dict())
@@ -183,9 +88,11 @@ def runAlignmentSW(Z, fasta_dict, pD, seqdict):
         D[k]['alignment'] = UtilityFunctions.AlignmentArray([X[0][1]])
         D[k]['names'] = [X[0][0]]
         D[k]['log'] = dict()
+        writeFastas(D[k], k, 1, pD['outdir'])
     return (D)
 
 
+    
 def runAlignmentPW(Z, fasta_dict, pD, quick=False):
     '''
     Runs SWalign on every pair of sequences in a Fasta file converted to
@@ -256,7 +163,7 @@ def runAlignmentPW(Z, fasta_dict, pD, quick=False):
     return (D)
 
 
-def writeFastas(results, outdir):
+def writeFastas(result, i, rround, outdir):
     '''
     Output three fasta files from a results dictionary generated with
     runAlignment.runAlignment.
@@ -275,20 +182,24 @@ def writeFastas(results, outdir):
     outfile: str
         path to output file
     '''
-    for i in results.keys():
-        ali_out = open("%s/cluster_%s_alignment.fasta" % (outdir, i), "w")
-        cons_out = open("%s/cluster_%s_consensus.fasta" % (outdir, i), "w")
-        both_out = open("%s/cluster_%s_ali_plus_cons.fasta" % (outdir, i), "w")
+    if not os.path.exists("%s/round_%i" % (outdir, rround)):
+        os.mkdir("%s/round_%i" % (outdir, rround))
+    ali_out = open("%s/round_%i/cluster_%s_alignment.fasta" % (
+        outdir, rround, i), "w")
+    cons_out = open("%s/round_%i/cluster_%s_consensus.fasta" % (
+        outdir, rround, i), "w")
+    both_out = open("%s/round_%i/cluster_%s_ali_plus_cons.fasta" % (
+        outdir, rround, i), "w")
 
-        ali = results[i]['alignment']
-        cons = results[i]['consensus']
-        names = results[i]['names']
+    ali = result['alignment']
+    cons = result['consensus']
+    names = result['names']
 
-        for i, nam in enumerate(names):
-            ali_out.write(">%s\n%s\n" % (nam, "".join(list(ali[i]))))
-            both_out.write(">%s\n%s\n" % (nam, "".join(list(ali[i]))))
-        cons_out.write(">consensus_%i\n%s\n" % (i, cons))
-        both_out.write(">consensus_%i\n%s\n" % (i, cons))
-        ali_out.close()
-        cons_out.close()
-        both_out.close()
+    for i, nam in enumerate(names):
+        ali_out.write(">%s\n%s\n" % (nam, "".join(list(ali[i]))))
+        both_out.write(">%s\n%s\n" % (nam, "".join(list(ali[i]))))
+    cons_out.write(">consensus_%i\n%s\n" % (i, cons))
+    both_out.write(">consensus_%i\n%s\n" % (i, cons))
+    ali_out.close()
+    cons_out.close()
+    both_out.close()

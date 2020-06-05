@@ -5,9 +5,135 @@ import math
 import UtilityFunctions
 import Consensus
 import sys
+from UtilityFunctions import logPrint as lp
+import copy
 # temporary until CIAlign is updated
 sys.path.insert(0, "/home/katy/CIAlign_P")
 import CIAlign.parsingFunctions
+
+
+def buildCluster(X, current, consensusD, pD, k):
+    '''
+    Build a cluster based on the current query sequence.
+    '''
+    lp("Starting new cluster with %s" % (current['name']), 2, pD)
+    j = 0
+    # these are updated throughout to represent the current alignment
+    matrix = current['matrix']
+    nt_inds = current['nt_inds']
+    seqdict = current['seqdict']
+
+    current_names = current['names']
+    current_consensus = current['consensus']
+    current_alignment = current['alignment']
+
+    # Each time a match is found and the the cluster is updated, start again
+    # with the new cluster as
+    # a query.
+    while j != len(X) and len(X) != 0:
+        i = 0
+        any_matches_inner = False
+        n_new = 0
+        # Look through all sequences which are not yet clustered until a match
+        # to the current query is found (or you get to the end)
+        while True and i != len(X):
+            # update the query sequence
+            query_seq = current_consensus
+            query_ali = current_alignment
+            query_names = current_names
+            target_nam, target_seq = X[i]
+
+            if "*consensus" in target_nam:
+                target_cons_ind = int(target_nam.split("_")[0])
+                target_ali = consensusD[target_cons_ind]['alignment']
+                target_names = consensusD[target_cons_ind]['names']
+            else:
+                target_ali = UtilityFunctions.AlignmentArray([target_seq])
+                target_names = [target_nam]
+
+            lp("Testing %s" % ", ".join(target_names), 3, pD)
+            # Align the query and target consensus sequences
+            result = SWalign(query_seq, target_seq,
+                             pD, useSub=False)
+
+            # Check the if the consensus sequences are a good match
+            is_match = alignmentMeetsCriteria(result, query_seq,
+                                              target_seq, pD)
+            # if they are not try the reverse complement
+
+            if not is_match[0]:
+                target_seq = UtilityFunctions.reverseComplement(target_seq)
+                result = SWalign(query_seq, target_seq,
+                                 pD, useSub=False)
+                is_match = alignmentMeetsCriteria(result,
+                                                  query_seq,
+                                                  target_seq,
+                                                  pD)
+                UtilityFunctions.reverseComplementAlignment(target_ali)
+                target_ali = UtilityFunctions.AlignmentArray([target_seq])
+                for nam in target_names:
+                    seqdict[nam]['is_rc'] = True
+
+            if is_match[0]:
+                lp("Match found.", 3, pD)
+                # We found a match - something has changed
+                any_matches_inner = True
+                n_new += 1
+                # remove the current value from X
+                X = X[:i] + X[i+1:]
+                result['alignment'] = is_match[1]
+                # get the full alignment for the two consensus sequences
+                result = getAlignmentFull(result,
+                                          query_seq,
+                                          target_seq,
+                                          pD)
+                current_names = query_names + target_names
+
+                lp("Expanding current alignment to include %s" % (
+                        ", ".join(target_names)), 3, pD)
+                ali, matrix = Consensus.expandAlignment(result,
+                                                        query_ali,
+                                                        target_ali,
+                                                        matrix,
+                                                        nt_inds)
+                # make a new sequence based on the new alignment
+                current_consensus = Consensus.collapseAlignment(
+                                    matrix, nt_inds)
+                current_alignment = ali
+                i = 0
+                # now you have a match and the consensus is updated,
+                # start at the top again
+                break
+            else:
+                lp("No match.", 3, pD)
+            # keep going through the other sequences
+            i += 1
+        j += 1
+
+        if any_matches_inner:
+            # if anything has changed, clean up the alignment etc
+            lp("Cluster %i updated - %s sequences" % (k,
+                                                      len(current_names)),
+               2, pD)
+            lp("Cleaning cluster %i with CIAlign" % (k), 3, pD)
+            R = cleanAlignmentCIAlign(current_alignment,
+                                      current_names,
+                                      query_seq,
+                                      matrix,
+                                      nt_inds,
+                                      seqdict)
+            current_alignment, matrix, current_consensus, seqdict = R
+            print(np.shape(current_alignment))
+        else:
+            break
+    C = dict()
+    C['current_alignment'] = current_alignment
+    C['current_consensus'] = current_consensus
+    C['current_names'] = current_names
+    C['seqdict'] = seqdict
+    C['matrix'] = matrix
+    C['nt_inds'] = nt_inds
+    return (X, C)
 
 
 def alignmentMeetsCriteria(result, query_seq, target_seq, pD):
@@ -234,7 +360,7 @@ def cleanAlignmentCIAlign(arr,
                                                           relativePositions,
                                                           logtype='dict',
                                                           min_size=1,
-                                                          max_size=10)
+                                                          max_size=30)
             arr, r, relativePositions = R
             # convert the removed positions to an np.array so they can be
             # used as an index
@@ -257,6 +383,8 @@ def cleanAlignmentCIAlign(arr,
             # and tuple[1] is the positions removed from the end
             arr, r = CIAlign.parsingFunctions.cropEnds(arr, nams,
                                                        relativePositions,
+                                                       redefine_perc=0.2,
+                                                       mingap=0.01,
                                                        logtype='dict')
             # iterate through the dictionary
             for nam in r:
