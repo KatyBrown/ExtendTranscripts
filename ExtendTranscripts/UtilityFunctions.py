@@ -15,7 +15,7 @@ def FastaToDict(infile, rna=False):
     ----------
     infile: str
         path to fasta file
- 
+
     Returns
     -------
     dict
