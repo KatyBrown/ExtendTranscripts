@@ -10,6 +10,68 @@ sys.path.insert(0, "/home/katy/CIAlign_P")
 import CIAlign.parsingFunctions
 
 
+def alignmentMeetsCriteria(result, query_seq, target_seq, pD):
+    '''
+    Check that the alignment meets the criteria:
+        * alignment length > pD['min_length']
+        * either one sequence overlaps at one or both ends, the whole of one
+          sequence is contained within the other or the sequences are the same
+          length
+        * alignment identity > pD['min_perc_ident']
+
+    Each step is only run if the previous criteria is passed, they are ordered
+    by how long they take.
+    '''
+    # check the length of the aligned region
+    length = UtilityFunctions.lengthFromCIGAR(result['cigar'])
+    qlength = result['query_end'] - result['query_start']
+    tlength = result['target_end'] - result['target_start']
+    # this is quickest - if it's too short dont' check anything
+    if pD['alignment_length_min_n']:
+        min_length_Q = pD['alignment_length_min_n']
+        min_length_T = pD['alignment_length_min_n']
+    else:
+        min_length_Q = math.ceil(
+            pD['alignment_length_min_perc'] * len(query_seq))
+        min_length_T = math.ceil(
+            pD['alignment_length_min_perc'] * len(target_seq))
+    # else
+    if qlength >= min_length_T and tlength >= min_length_Q:
+        wo_indels = UtilityFunctions.lengthFromCIGAR(result['cigar'],
+                                                     mOnly=True)
+        indels = wo_indels / length
+        if pD['alignment_indels_max_n']:
+            max_indels = pD['alignment_indels_max_n']
+        else:
+            max_indels = math.ceil(pD['alignment_indels_max_perc'] * length)
+        if indels > (1 - max_indels):
+            # check how the sequences overlap - the aligned region
+            # needs to either include the end of a sequence or neither
+            # sequence is heavily clipped
+
+            SE = findOverlapType(result, query_seq, target_seq,
+                                 pD, keep_failed=False)
+            if SE:
+                alignment = getAlignmentLocal(result,
+                                              query_seq,
+                                              target_seq,
+                                              pD)
+                alignment_identity = alignment[2]
+                if alignment_identity:
+                    return (True, alignment)
+                else:
+                    # all the False values are one element tuples so that
+                    # the alignment can be returned and accessed if the
+                    # result is True
+                    return (False, )
+            else:
+                return (False, )
+        else:
+            return (False, )
+    else:
+        return (False, )
+
+
 def gappedToUngapped(row, removed_pos):
     '''
     Takes an aligned sequence (with gaps) and a set of indices of residues

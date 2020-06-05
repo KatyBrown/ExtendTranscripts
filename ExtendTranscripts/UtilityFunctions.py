@@ -2,6 +2,7 @@
 import numpy as np
 import re
 import itertools
+import sys
 
 
 def FastaToDict(infile, rna=False):
@@ -146,3 +147,12 @@ def lengthFromCIGAR(cigar, excludeI=False, excludeD=False, mOnly=False):
     if mOnly:
         return (sum([int(x[:-1]) for x in re.findall(r'\d+[M]', cigar)]))
     return(sum([int(x) for x in re.findall(r'\d+', cigar)]))
+
+
+def logPrint(string, level, pD):
+    if 'log' in pD:
+        log = pD['log']
+        if level <= pD['logging_verbosity']:
+            log.info(string)
+        if level <= pD['stdout_verbosity']:
+            sys.stdout.write("%s\n" % (string))
