@@ -23,8 +23,7 @@ def floatOpt(val):
 
 def main():
     parser = configargparse.ArgumentParser(
-                description='''Extend contigs''',
-                add_help=False)
+                description='''Extend contigs''', add_help=True)
     required = parser.add_argument_group('Required Arguments')
     optional = parser.add_argument_group('Optional Arguments')
 
@@ -77,7 +76,8 @@ def main():
 
     optional.add("--ident_min_perc", dest="alignment_ident_min_perc",
                  type=floatOpt,
-                 help="""minimum % identical nucleotides in overlapping \
+                 help="""minimum percentage identical nucleotides in \
+                 overlapping \
                  region when aligning with SW, overridden if ident_min_n \
                  is specified""",
                  default=0.9)
@@ -142,9 +142,10 @@ def main():
     pD = vars(args)
 
     fasta_dict = UtilityFunctions.FastaToDict(args.infile)
-    runAlignment.runAlignment(fasta_dict, pD, args.outdir, log,
+    runAlignment.runAlignment(fasta_dict, pD, args.outdir,
                               alignment_type=args.alignment_type,
-                              quick=False, rename=True)
+                              quick=False, rename=True,
+                              logging=True, log=log)
 
 
 if __name__ == "__main__":
