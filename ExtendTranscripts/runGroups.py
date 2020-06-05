@@ -2,6 +2,7 @@
 import Groups
 import runAlignment
 
+
 def buildGroupAlignments(D, namD, rev_namD, F, pD):
     groups = Groups.groupAlignmentDict(D, namD)
     aliD = dict()

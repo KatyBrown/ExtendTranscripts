@@ -2,10 +2,12 @@
 import numpy as np
 import re
 import itertools
+
+
 def FastaToDict(infile, rna=False):
     '''
     Converts a fasta file to a dictionary
-    
+
     Keys are the sequence names (without ">") and values are the
     sequences.
 
@@ -13,7 +15,7 @@ def FastaToDict(infile, rna=False):
     ----------
     infile: str
         path to fasta file
-        
+ 
     Returns
     -------
     dict
@@ -49,6 +51,7 @@ def AlignmentArray(seqs):
     arr = np.array(seqs)
     return (arr)
 
+
 def IUPAC():
     '''
     Make two dictionaries representing the IUPAC characters for ambiguous
@@ -83,7 +86,7 @@ def IUPAC():
     for key, val in D1.items():
         if key not in ['A', 'G', 'T', 'C']:
             for comb in itertools.permutations(val, len(val)):
-                D2["".join(comb)] = key    
+                D2["".join(comb)] = key
     return (D1, D2)
 
 
@@ -101,8 +104,8 @@ def reverseComplement(seq):
     str
         string containing the reverse complement of the sequence
     '''
-    rcdict = {"A":"T", "C":"G", "T":"A", "G":"C", "N":"N", "Y": "R",
-              "K": "M", "R": "Y", "M":"K", "B":"V", "V": "B", "D": "H",
+    rcdict = {"A": "T", "C": "G", "T": "A", "G": "C", "N": "N", "Y": "R",
+              "K": "M", "R": "Y", "M": "K", "B": "V", "V": "B", "D": "H",
               "H": "D", "W": "W", "S": "S", "-": "-"}
     seq = list(seq)[::-1]
     seq = [rcdict[s] for s in seq]
@@ -112,6 +115,7 @@ def reverseComplement(seq):
 
 def readCIGAR(cigar):
     return(re.findall(r'\d+\D*', cigar))
+
 
 def lengthFromCIGAR(cigar, excludeI=False, excludeD=False, mOnly=False):
     if excludeI:

@@ -2,6 +2,7 @@
 import numpy as np
 import UtilityFunctions
 
+
 def makeAlignmentMatrix(alignment):
     '''
     Make a matrix which will be used to record the details of the current
@@ -18,11 +19,11 @@ def makeAlignmentMatrix(alignment):
     nt_inds = dict((n, i) for i, n in enumerate(nts))
     # create an empty matrix with one row, plus one column for each nt in
     # the sequence
-    sequence = alignment[0,:]
+    sequence = alignment[0, :]
     alignment_tab = np.zeros((len(nts), len(sequence)))
     # fill in the matrix with the nts in the first sequence
     for i in range(np.shape(alignment)[0]):
-        sequence = alignment[i,:]
+        sequence = alignment[i, :]
         for col, char in enumerate(sequence):
             nt_ind = nt_inds[char]
             alignment_tab[nt_ind, col] += 1
@@ -34,7 +35,6 @@ def getPosCigar(cigar, count_typs=['D', 'X']):
     Returns the positions at which insertions occur according to the cigar
     string and the number of insertions, used to insert gaps into the target
     sequence relative to the query sequence.
-    
     '''
     # convert the cigar string into a list
     cigar_L = UtilityFunctions.readCIGAR(cigar)
@@ -53,13 +53,25 @@ def getPosCigar(cigar, count_typs=['D', 'X']):
     return (in_pos)
 
 
+def updateOneArray(array, cigar, direc='query'):
+    if direc == 'query':
+        indels = getPosCigar(cigar, count_typs=['D', 'X'])
+    elif direc == "target":
+        indels = getPosCigar(cigar, count_typs=['I', 'Y'])
+    for pos, count in indels:
+        dashes = np.chararray((np.shape(array)[0], count))
+        dashes[:] = "-"
+        newA_left = array[:, :pos]
+        newA_right = array[:, pos:]
+        array = np.concatenate((newA_left, dashes, newA_right), axis=1)
+    return (array)
+
+
 def updateArrays(old_alignment_array,
                  new_alignment_array,
                  matrix,
                  nt_inds,
-                 cigar,
-                 cigar_updated,
-                 new_seq):
+                 cigar_updated):
     '''
     Updates the two arrays representing the alignment.
     Parameters
@@ -68,56 +80,41 @@ def updateArrays(old_alignment_array,
         Numpy array representing the previous MSA
     new_alignment_array: np.array
         Numpy array representing the new target sequence
-        
+
     aligned with the consensus of the old MSA
-    matrix is a 
+
     I = insertion in query
     D = insertion in target
     '''
-    prev_count = matrix.sum(1)[0]
-    assert UtilityFunctions.lengthFromCIGAR(
-            cigar_updated) == np.shape(
-                    new_alignment_array)[1], "Something is wrong with the cigar string"
-    matrix_updated = matrix
 
-    if cigar_updated == "%sM" % UtilityFunctions.lengthFromCIGAR(cigar_updated):
+    matrix_updated = matrix
+    old_alignment_array_updated = old_alignment_array
+    new_alignment_array_updated = new_alignment_array
+
+    if cigar_updated == "%sM" % UtilityFunctions.lengthFromCIGAR(
+            cigar_updated):
         full_alignment_array = np.concatenate((old_alignment_array,
                                                new_alignment_array))
     else:
-        old_alignment_array_updated = old_alignment_array
-        insertions = getPosCigar(cigar_updated)
-        for pos, count in insertions:
-            dashes =  np.chararray((np.shape(old_alignment_array_updated)[0], count))
-            dashes[:] = "-"
-            zeros =  np.zeros((np.shape(matrix_updated)[0], count))
-            newA_left = old_alignment_array_updated[:, :pos]
-            newA_right = old_alignment_array_updated[:, pos:]
-            newM_left = matrix_updated[:, :pos]
-            newM_right = matrix_updated[:, pos:]
-            
-            old_alignment_array_updated = np.concatenate((
-                    newA_left, dashes, newA_right), axis=1)
-            matrix_updated = np.concatenate((newM_left,
-                                            zeros,
-                                            newM_right), axis=1)
-            matrix_updated[pos:pos+count, nt_inds["-"]] += prev_count
-        try:
-            full_alignment_array = np.concatenate((
-                    old_alignment_array_updated, new_alignment_array))
-        except:
-            out = open("temp1.fasta", "w")
-            for i, row in enumerate(old_alignment_array_updated):
-                out.write(">%i\n%s\n" % (i, "".join(row)))
-            for row in new_alignment_array:
-                out.write(">%i\n%s\n" % (i+1, "".join(row)))
-            c = collapseAlignment(matrix_updated, nt_inds)
-            out.write(">cons\n%s\n" % c)
-            out.close()
-            raise RuntimeError ("argh")
-
-    for col, char in enumerate(new_seq):
-        nt_ind = nt_inds[char]
-        matrix_updated[nt_ind, col] += 1
+        old_alignment_array_updated = updateOneArray(
+                old_alignment_array_updated,
+                cigar_updated,
+                direc='query')
+        new_alignment_array_updated = updateOneArray(
+                                      new_alignment_array_updated,
+                                      cigar_updated,
+                                      direc='target')
+    assert UtilityFunctions.lengthFromCIGAR(
+            cigar_updated) == np.shape(
+                    new_alignment_array_updated)[1], (
+                            "Something is wrong with the target cigar string")
+    assert UtilityFunctions.lengthFromCIGAR(
+            cigar_updated) == np.shape(
+                    old_alignment_array_updated)[1], (
+                            "Something is wrong with the query cigar string")
+    full_alignment_array = np.concatenate((old_alignment_array_updated,
+                                          new_alignment_array_updated))
+    matrix_updated = makeAlignmentMatrix(full_alignment_array)[0]
     return (full_alignment_array, matrix_updated)
 
 
@@ -137,7 +134,7 @@ def collapseAlignment(matrix, nt_inds):
         else:
             maxi_nt = nt_keys[maxi]
             maxi_string = "".join(list(maxi_nt))
-            
+
             if maxi_string not in D2:
                 if maxi_string in ['A', 'C', 'G', 'T']:
                     C.append(maxi_string)
@@ -151,24 +148,13 @@ def collapseAlignment(matrix, nt_inds):
     return (cons)
 
 
-def expandAlignment(result, matrix, nt_inds, consensusD, level):
-    query_seq = result['query_seq_aligned']
-    target_seq = result['target_seq_aligned']
-    cigar = result['cigar']
+def expandAlignment(result, query_alignment, target_alignment,
+                    matrix, nt_inds):
     cigar_updated = result['cigar_updated']
-
-    if level == 0:
-        old_alignment_array = UtilityFunctions.AlignmentArray([query_seq.replace("-", "")])
-    else:
-        old_alignment_array = consensusD[level - 1]['alignment']
-    new_alignment_array = UtilityFunctions.AlignmentArray([target_seq])
-    full_alignment_array, matrix = updateArrays(old_alignment_array,
-                                                new_alignment_array,
+    full_alignment_array, matrix = updateArrays(query_alignment,
+                                                target_alignment,
                                                 matrix,
                                                 nt_inds,
-                                                cigar,
-                                                cigar_updated,
-                                                target_seq)
-    
+                                                cigar_updated)
+
     return (full_alignment_array, matrix)
-    
