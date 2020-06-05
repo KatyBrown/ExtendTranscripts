@@ -1,0 +1,22 @@
+No file of quality values (.qual) is found
+No file of constraints (.con) is found.
+No overlap is found in the given 5' clipping range for read NM_002046.7_1
+  5' clipping ranges for overlaps: 113  
+No overlap is found in the given 5' clipping range for read NM_002046.7_2
+  5' clipping ranges for overlaps: 103  110  
+No overlap is found in the given 5' clipping range for read NM_002046.7_9
+  5' clipping ranges for overlaps: 114  
+No overlap is found in the given 3' clipping range for read NM_002046.7_15
+  3' clipping ranges for overlaps: 110  
+Number of overlaps saved: 9
+ComputeOverlap done
+IdentifyChimeras done
+Number of overlaps removed: 6
+RemovePoorOverlaps done
+ASSEM done
+ComputDistForContigs done
+PresentLayout done
+Clip NM_002046.7_13 left clip: 1, right clip: 227,  length: 227,  right size 0
+Clip NM_002046.7_7 left clip: 78, right clip: 271,  length: 271,  right size 0
+Clip NM_002046.7_22 left clip: 1, right clip: 216,  length: 260,  right size 44
+Clip NM_002046.7_12 left clip: 2, right clip: 218,  length: 239,  right size 21

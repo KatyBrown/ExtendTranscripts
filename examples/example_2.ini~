@@ -1,0 +1,16 @@
+infile=input_files/human_gapdh.fasta
+outfile=example_2.fasta
+min_fragment_length=100
+max_fragment_length=300
+min_n_fragments=15
+max_n_fragments=25
+min_diversity=0.05
+max_diversity=0.08
+min_n_insertions=2
+max_n_insertions=8
+min_insertion_size=4
+max_insertion_size=10
+min_n_deletions=2
+max_n_deletions=8
+min_deletion_size=4
+max_deletion_size=10
