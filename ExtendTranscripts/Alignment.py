@@ -4,6 +4,9 @@ import numpy as np
 import math
 import UtilityFunctions
 import Consensus
+import sys
+# temporary until CIAlign is updated
+sys.path.insert(0, "/home/katy/CIAlign_P")
 import CIAlign.parsingFunctions
 
 
@@ -296,8 +299,8 @@ def SWalign(seq1, seq2, pD, useSub=False):
     '''
     gap_open = pD['alignment_gap_open']
     gap_extend = pD['alignment_gap_extend']
-    match_score = pD['match_score']
-    mismatch_score = pD['mismatch_score']
+    match_score = pD['alignment_match_score']
+    mismatch_score = pD['alignment_mismatch_score']
 
     if useSub:
         subs = UtilityFunctions.subMatrixIUPAC(pD['alignment_match_score'],

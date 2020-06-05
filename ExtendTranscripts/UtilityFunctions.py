@@ -90,6 +90,13 @@ def IUPAC():
     return (D1, D2)
 
 
+def getRCDict():
+    rcdict = {"A": "T", "C": "G", "T": "A", "G": "C", "N": "N", "Y": "R",
+              "K": "M", "R": "Y", "M": "K", "B": "V", "V": "B", "D": "H",
+              "H": "D", "W": "W", "S": "S", "-": "-"}
+    return (rcdict)
+
+
 def reverseComplement(seq):
     '''
     Reverse complements a sequence
@@ -104,13 +111,27 @@ def reverseComplement(seq):
     str
         string containing the reverse complement of the sequence
     '''
-    rcdict = {"A": "T", "C": "G", "T": "A", "G": "C", "N": "N", "Y": "R",
-              "K": "M", "R": "Y", "M": "K", "B": "V", "V": "B", "D": "H",
-              "H": "D", "W": "W", "S": "S", "-": "-"}
+    rcdict = getRCDict()
     seq = list(seq)[::-1]
     seq = [rcdict[s] for s in seq]
     seq = "".join(seq)
     return (seq)
+
+
+def reverseComplementAlignment(ali):
+    '''
+    Reverse complement a numpy array containing a 2D multiple sequence
+    alignment.  Dimension 0 is rows in the alignment, dimension 1 is
+    columns.
+    '''
+    rcdict = getRCDict()
+    new = []
+    for row in ali:
+        rev = row[::-1]
+        revC = [rcdict[X] for X in rev]
+        new.append(revC)
+    new = np.array(new)
+    return (new)
 
 
 def readCIGAR(cigar):

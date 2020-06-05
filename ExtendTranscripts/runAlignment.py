@@ -19,7 +19,10 @@ def runAlignment(fasta_dict, pD, outdir, log, alignment_type='pairwise',
 
     nams = fasta_dict.keys()
     seqs = fasta_dict.values()
-    seqdict = dict()
+    seqdict = {nam: dict() for nam in nams}
+
+    for nam in nams:
+        seqdict[nam]['is_rc'] = False
 
     Z = sorted(zip(nams, seqs), key=lambda x: len(x[1]))[::-1]
 
@@ -166,6 +169,7 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, seqdict, rename=False):
                 is_match = alignmentMeetsCriteria(result, query_seq,
                                                   target_seq, pD)
                 # if they are not try the reverse complement
+
                 if not is_match[0]:
                     target_seq = UtilityFunctions.reverseComplement(target_seq)
                     result = Alignment.SWalign(query_seq, target_seq,
@@ -173,7 +177,10 @@ def runAlignmentSW(Z, namD, fasta_dict, pD, seqdict, rename=False):
                     is_match = alignmentMeetsCriteria(result, query_seq,
                                                       target_seq, pD)
                     ####################
+                    UtilityFunctions.reverseComplementAlignment(target_ali)
                     target_ali = UtilityFunctions.AlignmentArray([target_seq])
+                    for nam in target_names:
+                        seqdict[nam]['is_rc'] = True
 
                 if is_match[0]:
                     # We found a match - something has changed
