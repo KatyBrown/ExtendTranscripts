@@ -2,27 +2,33 @@
 import numpy as np
 import configargparse
 import sys
-sys.path.append("..")
-import UtilityFunctions
 import math
+
+sys.path.append("../ExtendTranscripts")
+import UtilityFunctions
+
 
 def getNucFreqs(sequence):
     counts = np.unique(list(sequence), return_counts=True)
     freqs = dict(zip(counts[0], counts[1] / len(sequence)))
-    return(freqs)    
+    return(freqs)
+
 
 def randomBase(freqs):
     return np.random.choice(list(freqs.keys()), p=list(freqs.values()))
 
+
 def randomPos(fragment, size):
     return (np.random.choice(range(len(fragment) - size)))
+
 
 def minmax(minx, maxx):
     if int(minx) == minx and int(maxx) == maxx:
         return(np.random.choice(range(minx, maxx)))
     else:
         return(np.random.uniform(minx, maxx))
-    
+
+
 def addSNPs(fragment, freqs, min_diversity, max_diversity):
     f = list(fragment)
     diversity = minmax(min_diversity, max_diversity)
@@ -31,6 +37,7 @@ def addSNPs(fragment, freqs, min_diversity, max_diversity):
         pos = randomPos(fragment, 1)
         f[pos] = randomBase(freqs)
     return ("".join(f))
+
 
 def addIndels(fragment,
               freqs,
@@ -51,6 +58,7 @@ def addIndels(fragment,
             f = f[:pos] + f[pos+indel_length:]
     return ("".join(f))
 
+
 def chopSequence(sequence, nam,
                  min_n_fragments,
                  max_n_fragments,
@@ -67,24 +75,25 @@ def chopSequence(sequence, nam,
         D[frag_nam] = seq
     return (D)
 
-    
+
 def main():
-    parser = configargparse.ArgumentParser(description='''Generate pseudo fragmented transcripts with
-                                     different degress of variation and insertions / deletions''')
+    parser = configargparse.ArgumentParser(
+        description='''Generate pseudo fragmented transcripts with different \
+            degress of variation and insertions / deletions''')
     parser.add_argument("--infile", dest="infile",
                         type=str,
                         help="path to input fasta file")
     parser.add_argument("--outfile", dest="outfile",
                         type=str,
                         help="path to output fasta file")
-    parser.add_argument("--config", dest="config", 
+    parser.add_argument("--config", dest="config",
                         type=str,
                         help='path to config file',
                         is_config_file=True)
 
     parser.add_argument("--min_fragment_length", dest="min_fragment_length",
                         type=int,
-                        help="minimum fragment length")    
+                        help="minimum fragment length")
     parser.add_argument("--max_fragment_length", dest="max_fragment_length",
                         type=int,
                         help="maximum fragment length")
@@ -99,15 +108,15 @@ def main():
                         help='minimum proportion of diversity to introduce')
     parser.add_argument('--max_diversity', dest='max_diversity',
                         type=float,
-                        help='maximum proportion of diversity to introduce')    
-    
+                        help='maximum proportion of diversity to introduce')
+
     parser.add_argument("--min_n_insertions", dest='min_n_insertions',
                         type=int,
                         help="minimum number of insertions to introduce")
     parser.add_argument("--max_n_insertions", dest='max_n_insertions',
                         type=int,
                         help="maximum number of insertions to introduce")
-    
+
     parser.add_argument("--min_insertion_size", dest="min_insertion_size",
                         type=int,
                         help='minimum size insertion to introduce')
@@ -121,7 +130,7 @@ def main():
     parser.add_argument("--max_n_deletions", dest='max_n_deletions',
                         type=int,
                         help="maximum number of deletions to introduce")
-    
+
     parser.add_argument("--min_deletion_size", dest="min_deletion_size",
                         type=int,
                         help='minimum size deletion to introduce')
@@ -130,10 +139,10 @@ def main():
                         help='maximum size deletion to introduce')
 
     args = parser.parse_args()
-    
+
     F = UtilityFunctions.FastaToDict(args.infile)
     Fnew = dict()
-    
+
     for nam, seq in F.items():
         freqs = getNucFreqs(seq)
         fragments = chopSequence(seq, nam,
@@ -159,8 +168,8 @@ def main():
                                  args.max_n_deletions,
                                  args.min_deletion_size,
                                  args.max_deletion_size,
-                                 typ='deletion')            
-            
+                                 typ='deletion')
+
             rc = np.random.choice([True, False])
             if rc:
                 fragment = UtilityFunctions.reverseComplement(fragment)
@@ -169,5 +178,7 @@ def main():
     for key, val in Fnew.items():
         out.write(">%s\n%s\n" % (key, val))
     out.close()
+
+
 if __name__ == "__main__":
     main()

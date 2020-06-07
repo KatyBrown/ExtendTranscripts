@@ -4,12 +4,12 @@ import configargparse
 import sys
 sys.path.append("/home/katy/ExtendTranscripts/ExtendTranscripts")
 import UtilityFunctions
-import AlignmentPW
+import Alignment
 
 
-    
 def main():
-    parser = configargparse.ArgumentParser(description='''Compare two sequences and calculate the % identity''')
+    parser = configargparse.ArgumentParser(
+        description='''Compare two sequences and calculate the % identity''')
     parser.add("--consensus", dest="consensus",
                type=str,
                help="path to consensus sequence fasta file")
@@ -20,20 +20,20 @@ def main():
                type=str,
                help="original sequence name")
     parser.add("--gap_open", dest="alignment_gap_open",
-                type=int,
-                help="gap opening penalty", default=5)
+               type=int,
+               help="gap opening penalty", default=5)
     parser.add("--gap_extend", dest="alignment_gap_extend",
-                type=int,
-                help="gap extension penalty", default=2)
+               type=int,
+               help="gap extension penalty", default=2)
     parser.add("--match_score", dest="alignment_match_score",
-                type=int,
-                help="score for each match in SW algorithm", default=5)
+               type=int,
+               help="score for each match in SW algorithm", default=5)
     parser.add("--mismatch_score", dest="alignment_mismatch_score",
-                type=int,
-                help="penalty for each mismatch in SW algorithm", default=-4)
+               type=int,
+               help="penalty for each mismatch in SW algorithm", default=-4)
 
     args = parser.parse_args()
-    
+
     consD = UtilityFunctions.FastaToDict(args.consensus)
     origD = UtilityFunctions.FastaToDict(args.original)
     cons_seq_f = list(consD.values())[0]
@@ -44,25 +44,23 @@ def main():
           'alignment_gap_extend': args.alignment_gap_extend,
           'alignment_match_score': args.alignment_match_score,
           'alignment_mismatch_score': args.alignment_mismatch_score}
-    ali_f = AlignmentPW.SWalign(cons_seq_f, orig_seq, pD)
-    ali_r = AlignmentPW.SWalign(cons_seq_r, orig_seq, pD)
-    
+    ali_f = Alignment.SWalign(cons_seq_f, orig_seq, pD)
+    ali_r = Alignment.SWalign(cons_seq_r, orig_seq, pD)
+
     if ali_f['optimal_alignment_score'] > ali_r['optimal_alignment_score']:
         ali = ali_f
         cons_seq = cons_seq_f
     else:
         ali = ali_r
         cons_seq = cons_seq_r
-    q, t, ident = AlignmentPW.getAlignmentLocal(ali, cons_seq, orig_seq, pD)
-    ali_length = UtilityFunctions.lengthFromCIGAR(ali['cigar'])
-    print (ali)
+    q, t, ident = Alignment.getAlignmentLocal(ali, cons_seq, orig_seq, pD)
     cons_length = len(cons_seq)
     orig_length = len(orig_seq)
     cons_perc_aligned = (ali['query_end'] - ali['query_start']) / cons_length
-    orig_perc_aligned = (ali['target_end'] - ali['target_start']) / cons_length
+    orig_perc_aligned = (ali['target_end'] - ali['target_start']) / orig_length
 
     print (ident, cons_perc_aligned, orig_perc_aligned)
-    
+
 
 if __name__ == "__main__":
     main()
