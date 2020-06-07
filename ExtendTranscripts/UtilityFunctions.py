@@ -22,6 +22,7 @@ def FastaToDict(infile, rna=False):
     dict
         dictionary where keys are sequence names and values are sequence or
         sequence lengths
+
     '''
     D = dict()
     seq = []

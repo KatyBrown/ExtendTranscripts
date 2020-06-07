@@ -5,7 +5,9 @@ import copy
 import Consensus
 from UtilityFunctions import logPrint as lp
 import os
+import shutil
 import AlignmentSW
+
 
 def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
                  quick=False):
@@ -24,14 +26,15 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
         D = runAlignmentPW(Z, fasta_dict, pD,
                            quick=quick)
     elif alignment_type == 'stepwise':
-        lp("Running clustering and alignment round 1", 2, pD)
+        lp("Running clustering and alignment round 1", 1, pD)
         D = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, 1)
+        lp("Identified %i clusters in round 1" % len(D), 2, pD)
         prev_len = len(D)
         i = 2
         current_len = 0
         currentD = copy.copy(D)
         while current_len < prev_len:
-            lp("Running clustering and alignment round %i" % i, 2, pD)
+            lp("Running clustering and alignment round %i" % i, 1, pD)
 
             cons_n = []
             cons_s = []
@@ -44,7 +47,21 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
             currentD = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, i,
                                                cons=True, currentD=currentD)
             current_len = len(currentD)
+            if current_len < prev_len:
+                lp("Identified %i clusters in round %i" % (len(currentD), i),
+                   2, pD)
+            else:
+                lp("Identified no additional clusters in round %i" % (
+                    i), 2, pD)
+                shutil.rmtree("%s/round_%i" % (pD['outdir'], i))
             i += 1
+    lp("Finished aligning and clustering %s" % (pD['infile']), 1, pD)
+    lp("Identified %i clusters from %i fragments" % (len(currentD),
+                                                     len(nams)), 1, pD)
+    if os.path.exists("%s/final_clusters" % (pD['outdir'])):
+        shutil.rmtree("%s/final_clusters" % (pD['outdir']))
+    shutil.copytree("%s/round_%i" % (pD['outdir'], i-2),
+                    "%s/final_clusters" % pD['outdir'])
     return (D)
 
 
@@ -116,4 +133,3 @@ def runAlignmentPW(Z, fasta_dict, pD, quick=False):
                     D.setdefault(target_nam, dict())
                     D[target_nam][query_nam] = result
     return (D)
-

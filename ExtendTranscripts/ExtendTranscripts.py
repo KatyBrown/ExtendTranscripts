@@ -3,6 +3,8 @@
 import os
 import logging
 import configargparse
+import sys
+sys.path.append("/home/katy/ExtendTranscripts/ExtendTranscripts")
 import runAlignment
 import UtilityFunctions
 from UtilityFunctions import logPrint as lp

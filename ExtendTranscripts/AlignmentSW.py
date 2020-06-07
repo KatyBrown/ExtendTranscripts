@@ -4,7 +4,6 @@ import Consensus
 from UtilityFunctions import logPrint as lp
 import copy
 import Alignment
-import numpy as np
 
 
 def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
@@ -41,7 +40,6 @@ def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
                                                 current['alignment'])
 
         current['seqdict'] = seqdict
-        print (np.shape(current['alignment']))
         # remove the query sequence from X
         X = X[1:]
         # Build a cluster based on the current query sequence
@@ -177,7 +175,6 @@ def buildCluster(X, current, pD, k, cons=False, currentD=None):
 
         if any_matches_inner:
             # if anything has changed, clean up the alignment etc
-            print (np.shape(current_alignment))
             lp("Cluster %i updated - %s sequences" % (k,
                                                       len(current_names)),
                2, pD)
@@ -192,6 +189,7 @@ def buildCluster(X, current, pD, k, cons=False, currentD=None):
             current_alignment, matrix, current_consensus, seqdict = R
         else:
             break
+
     C = dict()
     C['current_alignment'] = current_alignment
     C['current_consensus'] = current_consensus
