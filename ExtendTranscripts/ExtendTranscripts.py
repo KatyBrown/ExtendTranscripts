@@ -148,6 +148,14 @@ def main():
                   Default: %(default)s. Type: int""",
                   default=None)
 
+    alignment.add("--remove_insertions_max_n",
+                  dest="alignment_remove_insertions_max_n",
+                  type=int,
+                  help="""Remove insertions which are not in the majority \
+                  of sequences up to a maximum of this size from the \
+                  alignments as they are being built""",
+                  default=50)
+
     args = parser.parse_args()
 
     if not os.path.exists(args.outdir):
