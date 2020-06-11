@@ -37,9 +37,11 @@ def main():
     consD = UtilityFunctions.FastaToDict(args.consensus)
     origD = UtilityFunctions.FastaToDict(args.original)
     cons_seq_f = list(consD.values())[0]
+    cons_seq_f = cons_seq_f.upper()
+
     cons_seq_r = UtilityFunctions.reverseComplement(cons_seq_f)
     orig_seq = origD[args.orig_name]
-
+    orig_seq = orig_seq.upper()
     pD = {'alignment_gap_open': args.alignment_gap_open,
           'alignment_gap_extend': args.alignment_gap_extend,
           'alignment_match_score': args.alignment_match_score,
