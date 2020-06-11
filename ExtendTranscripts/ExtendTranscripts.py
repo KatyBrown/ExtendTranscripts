@@ -4,6 +4,7 @@ import os
 import logging
 import configargparse
 import sys
+import pyfaidx
 sys.path.append("/home/katy/ExtendTranscripts/ExtendTranscripts")
 import runAlignment
 import UtilityFunctions
@@ -179,10 +180,11 @@ def main():
 
     pD = vars(args)
     pD['log'] = log
+    pD['print'] = True
 
     lp("Initial Parameters %s" % str(parser.format_values()), level=1, pD=pD)
 
-    fasta_dict = UtilityFunctions.FastaToDict(args.infile)
+    fasta_dict = pyfaidx.Fasta(args.infile)
     runAlignment.runAlignment(fasta_dict, pD, args.outdir,
                               alignment_type=args.alignment_type,
                               quick=False)

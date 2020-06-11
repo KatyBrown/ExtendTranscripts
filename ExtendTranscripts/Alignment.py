@@ -649,3 +649,17 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
     result['cigar_updated'] = cigar_updated
 
     return(result)
+
+
+def mergeFastas(rround, nfastas, outdir):
+    F = dict()
+    for i in range(1, nfastas+1):
+        F.update(
+            UtilityFunctions.FastaToDict(
+                "%s/round_%i/cluster_%i_consensus.fasta" % (
+                    outdir, rround, i)))
+    nams = sorted(list(F.keys()), key=lambda x: int(x.split("_")[1]))
+    out = open("%s/round_%i/consensus_combined.fasta" % (outdir, rround), "w")
+    for nam in nams:
+        out.write(">%s\n%s\n" % (nam, F[nam]))
+    out.close()

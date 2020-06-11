@@ -3,6 +3,26 @@ import numpy as np
 import re
 import itertools
 import sys
+import configparser
+
+
+def makepDTesting(conf_file):
+    parser = configparser.ConfigParser()
+    parser.read(conf_file)
+    confdict = {section: dict(
+        parser.items(section)) for section in parser.sections()}
+    C = dict()
+    for c in confdict['alignment']:
+        val = confdict['alignment'][c]
+        if val == "None":
+            C['alignment_%s' % c] = None
+        elif val == "stepwise":
+            C['alignment_%s' % c] = val
+        else:
+            C['alignment_%s' % c] = float(val)
+    C['print'] = True
+    C['stdout_verbosity'] = 3
+    return (C)
 
 
 def FastaToDict(infile, rna=False):
@@ -155,5 +175,6 @@ def logPrint(string, level, pD):
         log = pD['log']
         if level <= pD['logging_verbosity']:
             log.info(string)
+    if 'print' in pD:
         if level <= pD['stdout_verbosity']:
             sys.stdout.write("%s\n" % (string))

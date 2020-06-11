@@ -7,20 +7,19 @@ from UtilityFunctions import logPrint as lp
 import os
 import shutil
 import AlignmentSW
-
+import pyfaidx
 
 def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
                  quick=False):
 
-    nams = fasta_dict.keys()
-    seqs = fasta_dict.values()
+    nams = sorted(list(fasta_dict.keys()))
     seqdict = {nam: dict() for nam in nams}
     lp("Reading input file %s" % pD['infile'], 1, pD)
     lp("%i sequences in input file" % (len(nams)), 2, pD)
     for nam in nams:
         seqdict[nam]['is_rc'] = False
 
-    Z = sorted(zip(nams, seqs), key=lambda x: len(x[1]))[::-1]
+    Z = list(enumerate(nams))
 
     if alignment_type == 'pairwise':
         D = runAlignmentPW(Z, fasta_dict, pD,
@@ -29,20 +28,22 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
         lp("Running clustering and alignment round 1", 1, pD)
         D = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, 1)
         lp("Identified %i clusters in round 1" % len(D), 2, pD)
+        Alignment.mergeFastas(1, len(D), outdir)
         prev_len = len(D)
         i = 2
         current_len = 0
         currentD = copy.copy(D)
         while current_len < prev_len:
             lp("Running clustering and alignment round %i" % i, 1, pD)
-
+            fasta_dict = pyfaidx.Fasta(
+                "%s/round_%i/consensus_combined.fasta" % (outdir, i - 1))
             cons_n = []
             cons_s = []
             for key in currentD:
                 cons_n.append('*consensus_%i' % key)
                 cons_s.append(currentD[key]['consensus'])
                 seqdict['*consensus_%i' % key] = dict()
-            Z = list(zip(cons_n, cons_s))
+            Z = list(enumerate(cons_n))
             prev_len = len(currentD)
             currentD = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, i,
                                                cons=True, currentD=currentD)
