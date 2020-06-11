@@ -366,7 +366,7 @@ def subMatrixIUPAC(match_score, mismatch_score):
         2D dictionary of every possible combination of nucleotides, including
         IUPAC characters, and the score to assign to this combination.
     '''
-    amb = Consensus.IUPAC()[0]
+    amb = UtilityFunctions.IUPAC()[0]
     scoreD = dict()
     for base1, L in amb.items():
         scoreD.setdefault(base1, dict())
@@ -424,8 +424,8 @@ def SWalign(seq1, seq2, pD, useSub=False):
     mismatch_score = pD['alignment_mismatch_score']
 
     if useSub:
-        subs = UtilityFunctions.subMatrixIUPAC(pD['alignment_match_score'],
-                                               pD['alignment_mismatch_score'])
+        subs = subMatrixIUPAC(pD['alignment_match_score'],
+                              pD['alignment_mismatch_score'])
 
         ali = StripedSmithWaterman(seq1, gap_open_penalty=gap_open,
                                    gap_extend_penalty=gap_extend,

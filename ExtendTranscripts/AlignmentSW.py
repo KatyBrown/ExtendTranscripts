@@ -117,7 +117,7 @@ def buildCluster(X, current, pD, k, cons=False, currentD=None):
             lp("Testing %s" % ", ".join(target_names), 3, pD)
             # Align the query and target consensus sequences
             result = Alignment.SWalign(query_seq, target_seq,
-                                       pD, useSub=False)
+                                       pD, useSub=True)
 
             # Check the if the consensus sequences are a good match
             is_match = Alignment.alignmentMeetsCriteria(result, query_seq,
