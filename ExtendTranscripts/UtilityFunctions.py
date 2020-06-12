@@ -25,7 +25,7 @@ def makepDTesting(conf_file):
     return (C)
 
 
-def FastaToDict(infile, rna=False):
+def FastaToDict(infile):
     '''
     Converts a fasta file to a dictionary
 
@@ -161,12 +161,15 @@ def readCIGAR(cigar):
 
 
 def lengthFromCIGAR(cigar, excludeI=False, excludeD=False, mOnly=False):
+    if excludeI and excludeD:
+        mOnly = True
+    if mOnly:
+        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M]', cigar)]))
     if excludeI:
         return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|D]', cigar)]))
     if excludeD:
         return (sum([int(x[:-1]) for x in re.findall(r'\d+[M|I]', cigar)]))
-    if mOnly:
-        return (sum([int(x[:-1]) for x in re.findall(r'\d+[M]', cigar)]))
+
     return(sum([int(x) for x in re.findall(r'\d+', cigar)]))
 
 

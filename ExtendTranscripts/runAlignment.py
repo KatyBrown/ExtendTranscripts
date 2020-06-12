@@ -9,6 +9,7 @@ import shutil
 import AlignmentSW
 import pyfaidx
 
+
 def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
                  quick=False):
 
