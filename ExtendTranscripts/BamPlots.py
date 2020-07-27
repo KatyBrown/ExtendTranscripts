@@ -12,7 +12,49 @@ import math
 import numpy as np
 import random
 import copy
-import Bam
+
+
+def plotAll(coverage_tab,
+            altCov,
+            bam_file,
+            bamnam,
+            bamD,
+            paired,
+            mm,
+            rl,
+            outdir,
+            contig,
+            contig_dict,
+            figdpi,
+            intervals,
+            coverage_lim):
+
+    for interval in intervals:
+        subtab = coverage_tab[(coverage_tab['pos'] >= interval[0]) &
+                              (coverage_tab['pos'] <= interval[1])]
+        if max(subtab['coverage'] < coverage_lim):
+            nfunctions = 3
+        else:
+            nfunctions = 2
+        f = plt.figure(figsize=(25, 5*nfunctions),
+                       dpi=figdpi)
+        f = matplotlib.gridspec.GridSpec(nfunctions, 1)
+        subplot = plt.subplot(f[0, 0])
+        plotbasicCov(subplot, subtab,
+                     colour='crimson', contig=contig, bam=bamnam)
+        subplot = plt.subplot(f[1, 0])
+        plotAltCov(subplot, altCov, interval, paired, rl)
+
+        if max(subtab['coverage']) < coverage_lim:
+            subplot = plt.subplot(f[2, 0])
+            plotReads(subplot, reads,
+                      interval, paired, rl)
+        plt.savefig("%s/%s_coverage_%s_%s_%s.png" % (
+                    outdir, contig, bamnam, interval[0], interval[1]),
+                    dpi=figdpi, bbox_inches='tight')
+        plt.close()
+
+
 
 def plotbasicCov(subplot, coverage_tab, colour, contig, bam):
     positions = coverage_tab['pos']
@@ -21,7 +63,7 @@ def plotbasicCov(subplot, coverage_tab, colour, contig, bam):
 
         subplot.set_xlim(min(positions),
                          max(positions))
-        subplot.plot(positions, coverage, color=colour, lw=10)
+        subplot.plot(positions, coverage, color=colour, lw=3)
 
         subplot.set_ylim(0,
                          max(coverage) * 1.1)
@@ -35,55 +77,44 @@ def plotbasicCov(subplot, coverage_tab, colour, contig, bam):
         subplot.text(0, 0.5, "No reads in this interval for %s, %s" % (contig,
                                                                        bam))
 
+def plotAltCov(subplot, altCov, interval, paired, rl):
+    xrange = np.arange(interval[0], interval[1])
+    starts, ends, bodies, inserts = altCov
+    
+    starts_sub = (starts + 1)[0:,interval[0]: interval[1]][0]
+    ends_sub = (ends + 1)[0:, interval[0]: interval[1]][0]
+    bodies_sub = (bodies + 1)[0:, interval[0]: interval[1]][0]
+    if paired:
+        inserts_sub = (inserts + 1)[0:, interval[0]: interval[1]][0]
+    
 
+    subplot.scatter(xrange, starts_sub / bodies_sub, color='#D9514E',
+                    marker='.', s=50)
+    subplot.scatter(xrange, ends_sub / bodies_sub, color='#2DA8D8',
+                    marker='.', s=50)
+    
+    if paired:
+        subplot.scatter(xrange, inserts_sub / bodies_sub, color='#2A2B2D',
+                        marker=".", s=50)
+    
+    subplot.vlines(rl, 0, subplot.get_ylim()[1], ls='dotted')
+    subplot.vlines(interval[1] - rl, 0, subplot.get_ylim()[1], ls='dotted')
+    subplot.set_xlim(interval[0], interval[1])
 
-
-def plotCov(coverage_tab, bams,
-            outdir, stem, contig,
-            fasta_dict,
-            coverage_tool,
-            figdpi, start_interval, end_interval,
-            intervals=[], minimum_coverage=1):
-    contig_length = max(coverage_tab['pos'])
-    intervals.insert(0, ((contig_length - end_interval, contig_length)))
-    intervals.insert(0, ((0, start_interval)))
-    intervals.insert(0, ((0, contig_length)))
-    # Assign one colour to each bam file
-    colours = [matplotlib.colors.rgb2hex(x)
-               for x in plt.cm.Dark2(np.linspace(0, 1, 8))]
-    # add cycles of colours in the case of >20 bam files
-    nrounds = math.ceil(len(bams) / 10) - 1
-    orig_colours = copy.copy(colours)
-    for i in range(nrounds):
-        colours += orig_colours
-
-    for bam in bams:
-        B, paired, mm = bamToDict(bam, contig, fasta_dict)
-        print (len(B))
-    for interval in intervals:
-        subtab = coverage_tab[(coverage_tab['pos'] >= interval[0]) &
-                              (coverage_tab['pos'] <= interval[1])]
-        goodbams = []
-        for bam in bams:
-            subtab2 = subtab[subtab['bam'] == bam]
-            if max(subtab2['coverage']) >= minimum_coverage:
-                goodbams.append(bam)
-        nbams = len(goodbams)
-        f = plt.figure(figsize=(25, 5*nbams),
-                       dpi=figdpi)
-        f = matplotlib.gridspec.GridSpec(nbams, 1)
-
-        # no whitespace between subplots
-        f.update(wspace=0, hspace=0)
-
-        for i, b in enumerate(goodbams):
-            subplot = plt.subplot(f[i, 0])
-            plotbasicCov(subplot, subtab[subtab['bam'] == b],
-                     colour=colours[i], contig=stem, bam=b)
-            subplot.xaxis.set_visible(False)
-        # Put the x axis back for the bottom plot
-        subplot.xaxis.set_visible(True)
-        
-        plt.savefig("%s/%s_coverage_%s_%s_%s.png" % (
-            outdir, stem, coverage_tool, interval[0], interval[1]),
-            dpi=figdpi, bbox_inches='tight')
+def plotReads(subplot, reads, interval, paired, rl):
+    # subplot.set_xlim(interval)
+    interval_len = interval[1] - interval[0]
+    #subplot.set_ylim(0, len(pos_all))
+    for i, read in reads:
+        if not read.is_reverse:
+            
+            subplot.plot([pos[0][0], pos[0][1]], [i, i], color='red', lw=0.4)
+            subplot.plot([pos[1][0], pos[1][1]], [i, i], color='blue', lw=0.4)
+            subplot.plot([pos[0][1], pos[1][0]], [i, i], color='purple', ls='dotted', lw=0.4)
+        else:
+            subplot.plot([pos[0][0], pos[0][1]], [i, i], color='orange', lw=0.4)
+            subplot.plot([pos[1][0], pos[1][1]], [i, i], color='green', lw=0.4)
+            subplot.plot([pos[0][1], pos[1][0]], [i, i], color='grey', ls='dotted', lw=0.4)
+   # subplot.set_xlim(0, interval_len)
+    #subplot.set_xticks(np.arange(0, interval_len, 10))
+    #subplot.set_xticklabels(np.arange(interval[0], interval[1], 10))

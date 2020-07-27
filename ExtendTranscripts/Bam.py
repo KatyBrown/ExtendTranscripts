@@ -2,16 +2,14 @@
 import pybedtools
 import pysam
 import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
 import UtilityFunctions
 import os
 import warnings
 import pyfaidx
 import math
 import numpy as np
-import random
 import copy
+import BamPlots
 
 
 def calculateCoverage(contig_file,
@@ -56,7 +54,7 @@ def calculateCoverage(contig_file,
 
         # convert the coverage table into a dataframe
         cov = [x.split("\t") for x in cov.split("\n")]
-        
+
         cov_df = pd.DataFrame(cov, columns=['chromosome',
                                             'pos',
                                             'reference_base',
@@ -64,11 +62,11 @@ def calculateCoverage(contig_file,
                                             'base_quality',
                                             'alignment_quality'])
         cov_df['bam'] = bamnam
-        
+
         # the final position is always NA for some reason
         cov_df['coverage'] = cov_df['coverage'].fillna(0)
         cov_df = cov_df[cov_df['pos'].notnull()]
-        
+
         # convert to int
         cov_df['coverage'] = cov_df['coverage'].astype(int)
         cov_df['pos'] = cov_df['pos'].astype(int)
@@ -78,12 +76,99 @@ def calculateCoverage(contig_file,
     return (cov_df)
 
 
-def bamToDict(bam, contig, contig_seq):
-    # make a forward and reverse string
-    # of the contig sequence
-    ref_fwd = contig_seq
-    ref_rev = UtilityFunctions.reverseComplement(contig_seq)
+def calcAltCoverage(bam_dict,
+                    contig_length,
+                    buffer_prop,
+                    rl):
+    '''
+    Calculate coverage at each position by terminal and
+    non-terminal positions in reads, insert region with paired
+    end reads.
+    '''
+    # calculate buffer size based on read length
+    buffer = math.ceil(rl * buffer_prop)
 
+    # keep track of the coverage of each type at each
+    # postion by adding to these vectors at the
+    # appropriate index
+
+    # coverage in left terminal of reads (0:buffer)
+    starts = np.zeros((1, contig_length))
+    # coverage in right terminal of reads (-buffer:end)
+    ends = np.zeros((1, contig_length))
+
+    # coverage in bodies of reads (buffer:-buffer)
+    bodies = np.zeros((1, contig_length))
+
+    # coverage in inserts - between read1 and read2 for paired
+    # end reads
+    inserts = np.zeros((1, contig_length))
+
+    # record the co-ordinates of the read
+    for read_ID in bam_dict:
+        if bam_dict[read_ID]['has_pair']:
+            read1 = bam_dict[read_ID]['read1']
+            read2 = bam_dict[read_ID]['read2']
+            # make a range covering all the positions in the read
+            read1_positions = np.arange(read1['start'], read1['end'])
+            read2_positions = np.arange(read2['start'], read2['end'])
+
+            # add one to all positions within the buffers
+            starts[0, read1_positions[:buffer]] += 1
+            ends[0, read2_positions[-buffer:]] += 1
+
+            # add one to all positions within the read bodies
+            bodies[0, read1_positions[buffer:]] += 1
+            bodies[0, read2_positions[:-buffer]] += 1
+
+            # add one to all positions between read1 and read2
+            inte = np.arange(read1_positions[-1], read2_positions[0])
+            inserts[0, inte] += 1
+
+        else:
+            # make a range covering all the positions in the read
+            read = [bam_dict[read_ID]['unpaired']]
+            read_positions = np.arange(read['start'], read['end'])
+
+            # add one to all the positions within the buffers
+            starts[0, read_positions[:buffer]] += 1
+            ends[0, read_positions[-buffer:]] += 1
+
+            # add one to all the positions within read bodies
+            bodies[0, read_positions[buffer:]] += 1
+
+    return (starts, ends, bodies, inserts)
+
+
+def getReadArray(bam_dict, paired):
+    if paired:
+        arr = np.empty([4, len(bam_dict)])
+    else:
+        arr = np.empty([2, len(bam_dict)])
+    nams = np.empty(len(bam_dict), dtype='object')
+    for i, (nam, read) in enumerate(bam_dict.items()):
+        if paired:
+            span = np.array([read['read1']['start'],
+                             read['read1']['end'],
+                             read['read2']['start'],
+                             read['read2']['end']])
+        else:
+            span = np.array([read['unpaired']['start'],
+                             read['unpaired']['end']])
+        arr[:, i] = span
+        nams[i] = nam
+    return (nams, arr)
+
+
+def getInRange(nams, arr, start_pos, end_pos):
+    which = np.sum(
+        (arr[0:4, :] >= start_pos) & (arr[0:4, :] <= end_pos), 0) != 0
+    whichnams = nams[which]
+    whicharr = arr[:, which]
+    return(whichnams, whicharr)
+
+
+def bamToDict(bam, contig, contig_seq):
     # read the bam file
     samfile = pysam.AlignmentFile(bam)
 
@@ -93,6 +178,8 @@ def bamToDict(bam, contig, contig_seq):
     D = dict()
     # number of reads not identical to reference
     mm = 0
+    # read lengths
+    rlens = []
     # check this bam is actually mapped to this contig
     if contig in samfile.references:
         for line in samfile.fetch(contig):
@@ -109,19 +196,25 @@ def bamToDict(bam, contig, contig_seq):
             # call the leftmost read read1 and the rightmost
             # read2 for convenience
             if line.is_read1 and line.is_proper_pair:
-                if line.is_reverse:
-                    thisdict = 'read2'
-                else:
+                if not line.is_reverse:
                     thisdict = 'read1'
+                    strand = "+"
+                else:
+                    thisdict = 'read2'
+                    strand = "-"
                 paired = True
+                D[read_ID]['has_pair'] = True
             elif line.is_read2 and line.is_proper_pair:
                 if line.is_reverse:
-                    thisdict = 'read1'
-                else:
                     thisdict = 'read2'
+                    strand = "+"
+                else:
+                    thisdict = 'read1'
+                    strand = "-"
+                D[read_ID]['has_pair'] = True
             else:
                 thisdict = 'unpaired'
-
+                D[read_ID]['has_pair'] = False
             # each read1, read2 or unpaired dict has
             # start - start position
             # end - end position
@@ -130,17 +223,10 @@ def bamToDict(bam, contig, contig_seq):
             # they also have "seq"
             D[read_ID][thisdict]['start'] = line.pos
             D[read_ID][thisdict]['end'] = line.aend
+            D[read_ID][thisdict]['strand'] = strand
 
-            # assign strand and get appropriate reference
-            if not line.is_reverse:
-                D[read_ID][thisdict]['strand'] = "+"
-                ref = ref_fwd
-            else:
-                D[read_ID][thisdict]['strand'] = "-"
-                ref = ref_rev
-            read_ref = ref[line.pos:line.aend]
-            # if the read is not identical to these
-            # positions on the reference
+            read_ref = contig_seq[line.pos:line.aend]
+
             if line.seq != read_ref:
                 this_read = np.array(list(line.seq))
                 ref_read = np.array(list(read_ref))
@@ -150,11 +236,12 @@ def bamToDict(bam, contig, contig_seq):
                 dnt = this_read[dpos]
                 D[read_ID][thisdict]['seq'] = (dpos, dnt)
                 mm += 1
-        return(D, paired, mm)
+            rlens.append(line.rlen)
+        return(D, samfile, paired, mm, np.median(rlens))
     else:
         raise RuntimeWarning("""The bam file %s is not mapped \
                              to contig %s""" % bam, contig)
-        return (None, None, None)
+        return (None, None, None, None, None)
 
 
 def getIntervals(start_interval, end_interval,
@@ -189,13 +276,15 @@ def runAll(fasta_dict,
            start_interval=100,
            end_interval=100,
            add_intervals=[],
-           min_coverage=1):
+           min_coverage=1,
+           buffer_prop=0.1,
+           coverage_lim=1000):
 
     # run each contig / segment indivdually
     for nam in fasta_dict.keys():
         # get the contig name
-        contig = nam.split(" ")[0].split(".")[0]
-        
+        contig = nam.split(" ")[0]
+
         contig_file = "%s/%s.fasta" % (outdir, contig)
         # make a fasta file for just this contig
         out = open(contig_file, "w")
@@ -211,7 +300,7 @@ def runAll(fasta_dict,
         # make a bed file of contig lengths for this contig
         bednam = "%s/%s.bed" % (outdir, contig)
         out = open(bednam, "w")
-        out.write("%s\t0\t%s\n" % contig, contig_length)
+        out.write("%s\t0\t%s\n" % (contig, contig_length))
         out.close()
 
         # store a pybedtools.BedTool object for the
@@ -228,10 +317,11 @@ def runAll(fasta_dict,
                                  contig_length)
 
         # read each bam file for this contig
-        for bam in bam_files:
-            bamnam = os.path.splitext(os.path.basename(bam))[0]
-            bamD, paired, mm = bamToDict(bam, contig, contig_dict)
-            if bamD is not None:
+        for bam_file in bam_files:
+            bamnam = os.path.splitext(os.path.basename(bam_file))[0]
+            bamD, samfile, paired, mm, rl = bamToDict(bam_file, contig,
+                                                      contig_seq)
+            if bamD is not None and len(bamD) > min_coverage:
                 coverage_tab = calculateCoverage(contig_file,
                                                  contig,
                                                  bam_file,
@@ -240,20 +330,23 @@ def runAll(fasta_dict,
                                                  bednam,
                                                  outdir,
                                                  coverage_tool)
+                altCov = calcAltCoverage(bamD,
+                                         contig_length,
+                                         buffer_prop,
+                                         rl)
+                BamPlots.plotAll(coverage_tab,
+                                 altCov,
+                                 bam_file,
+                                 bamnam,
+                                 bamD,
+                                 paired,
+                                 mm,
+                                 rl,
+                                 outdir,
+                                 contig,
+                                 contig_dict,
+                                 figdpi,
+                                 intervals,
+                                 coverage_lim)
 
-
-'''
-        plotCov(coverage_tab,
-                bam_files,
-                outdir,
-                stem,
-                contig=nam,
-                fasta_dict=fasta_dict,
-                coverage_tool=coverage_tool,
-                figdpi=figdpi,
-                start_interval=start_interval,
-                end_interval=end_interval,
-                intervals=intervals,
-                minimum_coverage=min_coverage)
-'''
 
