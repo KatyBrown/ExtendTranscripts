@@ -19,6 +19,7 @@ def plotAll(coverage_tab,
             bam_file,
             bamnam,
             bamD,
+            readArr,
             paired,
             mm,
             rl,
@@ -45,15 +46,26 @@ def plotAll(coverage_tab,
         subplot = plt.subplot(f[1, 0])
         plotAltCov(subplot, altCov, interval, paired, rl)
 
-        if max(subtab['coverage']) < coverage_lim:
-            subplot = plt.subplot(f[2, 0])
-            plotReads(subplot, reads,
+       # if max(subtab['coverage']) < coverage_lim:
+        subplot = plt.subplot(f[2, 0])
+        subReadArr = getInRange(readArr[0], readArr[1],
+                                readArr[2],
+                                interval[0], interval[1])
+        plotReads(subplot, subReadArr,
                       interval, paired, rl)
         plt.savefig("%s/%s_coverage_%s_%s_%s.png" % (
                     outdir, contig, bamnam, interval[0], interval[1]),
                     dpi=figdpi, bbox_inches='tight')
         plt.close()
 
+
+def getInRange(nams, arr, strands, start_pos, end_pos):
+    which = np.sum(
+        (arr[0:4, :] >= start_pos) & (arr[0:4, :] <= end_pos), 0) != 0
+    whichnams = nams[which]
+    whichstrand = strands[which]
+    whicharr = arr[:, which]
+    return(whichnams, whicharr, whichstrand)
 
 
 def plotbasicCov(subplot, coverage_tab, colour, contig, bam):
@@ -101,20 +113,34 @@ def plotAltCov(subplot, altCov, interval, paired, rl):
     subplot.vlines(interval[1] - rl, 0, subplot.get_ylim()[1], ls='dotted')
     subplot.set_xlim(interval[0], interval[1])
 
-def plotReads(subplot, reads, interval, paired, rl):
-    # subplot.set_xlim(interval)
+def plotReads(subplot, readArr, interval, paired, rl):
+    subplot.set_xlim(interval)
     interval_len = interval[1] - interval[0]
-    #subplot.set_ylim(0, len(pos_all))
-    for i, read in reads:
-        if not read.is_reverse:
-            
-            subplot.plot([pos[0][0], pos[0][1]], [i, i], color='red', lw=0.4)
-            subplot.plot([pos[1][0], pos[1][1]], [i, i], color='blue', lw=0.4)
-            subplot.plot([pos[0][1], pos[1][0]], [i, i], color='purple', ls='dotted', lw=0.4)
-        else:
-            subplot.plot([pos[0][0], pos[0][1]], [i, i], color='orange', lw=0.4)
-            subplot.plot([pos[1][0], pos[1][1]], [i, i], color='green', lw=0.4)
-            subplot.plot([pos[0][1], pos[1][0]], [i, i], color='grey', ls='dotted', lw=0.4)
-   # subplot.set_xlim(0, interval_len)
-    #subplot.set_xticks(np.arange(0, interval_len, 10))
-    #subplot.set_xticklabels(np.arange(interval[0], interval[1], 10))
+    
+    nams, arr, strands = readArr
+    ys = np.arange(0, np.shape(arr)[1])
+    
+    plus_arr = arr[:,strands == "+"]
+    plus_ys = ys[strands == "+"]
+    minus_arr = arr[:, strands == "-"]
+    minus_ys = ys[strands == "-"]
+
+    lw = 100 / np.shape(arr)[1]
+    print (lw)
+    subplot.plot([plus_arr[0,:], plus_arr[1,:]],
+                 [plus_ys, plus_ys], color='red', lw=lw)
+    subplot.plot([plus_arr[1,:], plus_arr[2,:]],
+                 [plus_ys, plus_ys], color='grey',
+                 ls='dotted', lw=lw)
+    subplot.plot([plus_arr[2,:], plus_arr[3,:]],
+                 [plus_ys, plus_ys],
+                 color='blue', lw=lw)
+
+    subplot.plot([minus_arr[0,:], minus_arr[1,:]],
+                 [minus_ys, minus_ys], color='green', lw=lw)
+    subplot.plot([minus_arr[1,:], minus_arr[2,:]],
+                 [minus_ys, minus_ys], color='grey',
+                 ls='dotted', lw=lw)
+    subplot.plot([minus_arr[2,:], minus_arr[3,:]],
+                 [minus_ys, minus_ys], color='orange', lw=lw)
+

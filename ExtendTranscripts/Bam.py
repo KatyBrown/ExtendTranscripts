@@ -146,26 +146,22 @@ def getReadArray(bam_dict, paired):
     else:
         arr = np.empty([2, len(bam_dict)])
     nams = np.empty(len(bam_dict), dtype='object')
+    strands = np.empty(len(bam_dict), dtype='object')
     for i, (nam, read) in enumerate(bam_dict.items()):
         if paired:
             span = np.array([read['read1']['start'],
                              read['read1']['end'],
                              read['read2']['start'],
                              read['read2']['end']])
+            strands[i] = read['read1']['strand']
         else:
             span = np.array([read['unpaired']['start'],
                              read['unpaired']['end']])
+            strands[i] = read['unpaired']['strand']
         arr[:, i] = span
         nams[i] = nam
-    return (nams, arr)
-
-
-def getInRange(nams, arr, start_pos, end_pos):
-    which = np.sum(
-        (arr[0:4, :] >= start_pos) & (arr[0:4, :] <= end_pos), 0) != 0
-    whichnams = nams[which]
-    whicharr = arr[:, which]
-    return(whichnams, whicharr)
+        
+    return (nams, arr, strands)
 
 
 def bamToDict(bam, contig, contig_seq):
@@ -334,11 +330,13 @@ def runAll(fasta_dict,
                                          contig_length,
                                          buffer_prop,
                                          rl)
+                readArr = getReadArray(bamD, paired)
                 BamPlots.plotAll(coverage_tab,
                                  altCov,
                                  bam_file,
                                  bamnam,
                                  bamD,
+                                 readArr,
                                  paired,
                                  mm,
                                  rl,
