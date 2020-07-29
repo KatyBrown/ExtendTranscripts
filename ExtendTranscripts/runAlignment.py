@@ -36,12 +36,13 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
         if not candidates:
             D = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, 1,
                                         candidates, reference_dict)
+            Alignment.mergeFastas(1, len(D), outdir)
         else:
             D = Candidates.runCandidates(Z, fasta_dict,
                                          seqdict, reference_dict,
                                          pD, outdir, rround=1)
         lp("Identified %i clusters in round 1" % len(D), 2, pD)
-        Alignment.mergeFastas(1, len(D), outdir)
+        
         prev_len = len(D)
         i = 2
         current_len = 0

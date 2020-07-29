@@ -100,42 +100,72 @@ def runCandidates(Z, fasta_dict, seqdict, candfile, pD, outdir, rround,
 
 
 def splitAlignment(currentD, outdir, minlen=50):
-    ali = currentD[1]['alignment']
-    nams = np.array(currentD[1]['names'][1:])
-    cons = currentD[1]['consensus']
-    newD = dict()
-    ali = ali[1:, :]
-    not_gap_only = np.where(np.sum(ali == "-", 0) != np.shape(ali)[0])[0]
-    cs = np.where(np.diff(not_gap_only) != 1)[0] + 1
-    sub_arrs = [((s[0], s[-1])) for s in np.split(not_gap_only, cs)]
+    m = 1
     comb_out = open("%s/round_1/consensus_combined.fasta" % outdir, "w")
-    for i, sub_arr in enumerate(sub_arrs):
-        if (sub_arr[1] - sub_arr[0]) > minlen:
-            stem = "%s/round_1/cluster_1_split_%i" % (outdir, i+i)
-            ali_out = open("%s_alignment.fasta" % (stem), "w")
-            both_out = open("%s_ali_plus_cons.fasta" % (stem), "w")
-            cons_out = open("%s_consensus.fasta" % (stem), "w")
-            sub_ali = ali[:, sub_arr[0]:sub_arr[1]]
-            sub_ali_ng = np.where(
-                np.sum(sub_ali == "-", 1) != np.shape(sub_ali)[1])[0]
-            sub_ali = sub_ali[sub_ali_ng, :]
-            sub_names = nams[sub_ali_ng]
-            newD.setdefault(i+1, dict())
-            newD[i+1]['alignment'] = sub_ali
-            newD[i+1]['names'] = list(sub_names)
-            newD[i+1]['log'] = None
-            newD[i+1]['seqdict'] = currentD[1]['seqdict']
-            matrix, nt_inds = Consensus.makeAlignmentMatrix(sub_ali)
-            cons = Consensus.collapseAlignment(matrix, nt_inds)
-            newD[i+1]['consensus'] = cons
-            for j, nam in enumerate(list(sub_names)):
-                seq = "".join(list(sub_ali[j]))
-                ali_out.write(">%s\n%s\n" % (nam, seq))
-                both_out.write(">%s\n%s\n" % (nam, seq))
-            comb_out.write(">*consensus_%s\n%s\n" % (i+1, cons))
-            both_out.write(">*consensus_%s\n%s\n" % (i+1, cons))
-            ali_out.close()
-            both_out.close()
-            cons_out.close()
+    for k in currentD:
+        ali = currentD[k]['alignment']
+        nams = np.array(currentD[k]['names'][1:])
+        cons = currentD[k]['consensus']
+        newD = dict()
+        ali = ali[1:, :]
+        not_gap_only = np.where(np.sum(ali == "-", 0) != np.shape(ali)[0])[0]
+        cs = np.where(np.diff(not_gap_only) != 1)[0] + 1
+        sub_arrs = [((s[0], s[-1])) for s in np.split(not_gap_only, cs)]
+        
+        i = 0
+        for sub_arr in sub_arrs:
+            if (sub_arr[1] - sub_arr[0]) > minlen:
+                stem = "%s/round_1/cluster_%i_split_%i" % (outdir, k, i+1)
+                ali_out = open("%s_alignment.fasta" % (stem), "w")
+                both_out = open("%s_ali_plus_cons.fasta" % (stem), "w")
+                cons_out = open("%s_consensus.fasta" % (stem), "w")
+                sub_ali = ali[:, sub_arr[0]:sub_arr[1]]
+                sub_ali_ng = np.where(
+                    np.sum(sub_ali == "-", 1) != np.shape(sub_ali)[1])[0]
+                sub_ali = sub_ali[sub_ali_ng, :]
+                sub_names = nams[sub_ali_ng]
+                newD.setdefault(m, dict())
+                newD[m]['alignment'] = sub_ali
+                newD[m]['names'] = list(sub_names)
+                newD[m]['log'] = None
+                newD[m]['seqdict'] = currentD[1]['seqdict']
+                matrix, nt_inds = Consensus.makeAlignmentMatrix(sub_ali)
+                cons = Consensus.collapseAlignment(matrix, nt_inds)
+                newD[m]['consensus'] = cons
+                for j, nam in enumerate(list(sub_names)):
+                    seq = "".join(list(sub_ali[j]))
+                    ali_out.write(">%s\n%s\n" % (nam, seq))
+                    both_out.write(">%s\n%s\n" % (nam, seq))
+                cons_out.write(">*consensus_%s\n%s\n" % (m, cons))
+                both_out.write(">*consensus_%s\n%s\n" % (m, cons))
+                comb_out.write(">*consensus_%s\n%s\n" % (m, cons))
+                ali_out.close()
+                both_out.close()
+                cons_out.close()
+                i += 1
+                m += 1
     comb_out.close()
     return (newD)
+
+def alignWithRef(currentD, reference_fasta):
+    for i in currentD:
+        query_seq = current_consensus
+        query_ali = current_alignment
+        query_names = current_names
+        target_nam = X[i][1]
+        target_seq = fasta_dict[target_nam][0:].seq
+        if cons:
+            cons_n_t = int(target_nam.replace("*consensus_", ""))
+            target_ali = currentD[cons_n_t]['alignment']
+            target_names = currentD[cons_n_t]['names']
+        else:
+            target_ali = UtilityFunctions.AlignmentArray([target_seq])
+            target_names = [target_nam]
+        lp("Testing %s" % ", ".join(target_names), 3, pD)
+        # Align the query and target consensus sequences
+        result = Alignment.SWalign(query_seq, target_seq,
+                                   pD, useSub=True)
+
+        # Check the if the consensus sequences are a good match
+        is_match = Alignment.alignmentMeetsCriteria(result, query_seq,
+                                                    target_seq, pD)

@@ -273,13 +273,13 @@ def main():
         if args.alignment_infile is None:
             raise RuntimeError(
                 "To align contigs a fasta file of contigs must be specified")
-        fasta_dict = pyfaidx.Fasta(args.alignment_infile,  )
+        fasta_dict = pyfaidx.Fasta(args.alignment_infile)
         if args.reference is None:
             runAlignment.runAlignment(fasta_dict, pD, args.outdir,
                                       alignment_type=args.alignment_type,
                                       min_length=args.alignment_min_length,
                                       quick=False)
-        else:            
+        else:         
             runAlignment.runAlignment(fasta_dict, pD, args.outdir,
                                       alignment_type=args.alignment_type,
                                       min_length=args.alignment_min_length,
