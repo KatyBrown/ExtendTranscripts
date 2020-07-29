@@ -14,20 +14,67 @@ from UtilityFunctions import logPrint as lp
 
 def runCandidates(Z, fasta_dict, seqdict, candfile, pD, outdir, rround,
                   currentD=None):
+    '''
+    Allows the user to specify a set of reference sequences - in the first
+    round of clustering, only contigs which align to these references
+    (meeting the same minimum criteria as for normal clustering) are
+    selected.  In the second round, the fragments identified in the query
+    file which matched the reference sequence are used to identify
+    further fragments.  From this point clustering of consensus
+    sequences continues as normal.
+    
+    Parameters
+    ----------
+    Z: list
+        List of two item tuples where the first element is an integer and
+        the second the sequence name for all sequences in the main input file
+    fasta_dict: pyfaidx.Fasta
+        pyfaidx indexed Fasta object containing the main input file of contigs
+    seqdict: dict
+        A dictionary where keys are sequence IDs and values are empty
+        dictionaries - these are used to store CIAlign logs for sequences
+        later but it is not run at this stage when candidate sequences are
+        used
+    candfile: str
+        Path to a file containing the reference sequences to match the contigs
+        to in the first round of clustering
+    pD: dict
+        Dictionary containing the initial parameters set by the user
+    outdir: str
+        Path to directory in which to save all output files
+    rround: int
+        Round number - which round of clustering is this - used to
+        determine where to save the output
+    currentD: dict
+        Dictionary containing the results of previous rounds of clustering
+        used in this case to expand consensus sequences from round 1
+    
+    Returns
+    -------
+    D: dict
+        Updated version of currentD containing the results of this
+        round of clustering
+    '''
 
     X = copy.copy(Z)
     candidates = UtilityFunctions.FastaToDict(candfile)
     D = dict()
     k = 0
+    # iterate through the reference sequences
     for c_nam, c_seq in candidates.items():
         current = dict()
+        # store candidate name and sequence in the results dictionary
         current['name'] = c_nam
         current['consensus'] = c_seq
         if rround == 1:
+            # in the first round, none of the input sequences are
+            # consensus sequences
             current['alignment'] = UtilityFunctions.AlignmentArray([c_seq])
             current['seqdict'] = seqdict
             current['names'] = [c_nam]
         elif rround == 2:
+            # in the second round, expand the consensus sequences based
+            # on the output of the previous round
             consn = int(c_nam.replace("*consensus_", ""))
             current['alignment'] = currentD[consn]['alignment']
             current['seqdict'] = currentD[consn]['seqdict']
