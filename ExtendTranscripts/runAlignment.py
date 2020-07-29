@@ -8,14 +8,20 @@ import os
 import shutil
 import AlignmentSW
 import pyfaidx
+import Candidates
 
 
 def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
-                 quick=False):
+                 min_length=30,
+                 quick=False, candidates=False, reference_dict=False):
 
-    nams = sorted(list(fasta_dict.keys()))
+    nams_orig = sorted(list(fasta_dict.keys()))
+    nams = []
+    for nam in nams_orig:
+        if len(fasta_dict[nam][:].seq) > min_length:
+            nams.append(nam)
     seqdict = {nam: dict() for nam in nams}
-    lp("Reading input file %s" % pD['infile'], 1, pD)
+    lp("Reading input file %s" % pD['alignment_infile'], 1, pD)
     lp("%i sequences in input file" % (len(nams)), 2, pD)
     for nam in nams:
         seqdict[nam]['is_rc'] = False
@@ -27,12 +33,26 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
                            quick=quick)
     elif alignment_type == 'stepwise':
         lp("Running clustering and alignment round 1", 1, pD)
-        D = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, 1)
+        if not candidates:
+            D = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, 1,
+                                        candidates, reference_dict)
+        else:
+            D = Candidates.runCandidates(Z, fasta_dict,
+                                         seqdict, reference_dict,
+                                         pD, outdir, rround=1)
         lp("Identified %i clusters in round 1" % len(D), 2, pD)
         Alignment.mergeFastas(1, len(D), outdir)
         prev_len = len(D)
         i = 2
         current_len = 0
+        if candidates:
+            D = Candidates.splitAlignment(D, outdir)
+            new_cands = "%s/round_1/consensus_combined.fasta" % outdir
+            D = Candidates.runCandidates(Z, fasta_dict,
+                                         seqdict, new_cands,
+                                         pD, outdir, rround=2,
+                                         currentD=D)
+            i += 1
         currentD = copy.copy(D)
         while current_len < prev_len:
             lp("Running clustering and alignment round %i" % i, 1, pD)
@@ -46,18 +66,21 @@ def runAlignment(fasta_dict, pD, outdir, alignment_type='pairwise',
                 seqdict['*consensus_%i' % key] = dict()
             Z = list(enumerate(cons_n))
             prev_len = len(currentD)
+
             currentD = AlignmentSW.runClusters(Z, fasta_dict, pD, seqdict, i,
                                                cons=True, currentD=currentD)
             current_len = len(currentD)
             if current_len < prev_len:
                 lp("Identified %i clusters in round %i" % (len(currentD), i),
                    2, pD)
+                Alignment.mergeFastas(i, len(currentD), outdir)
+
             else:
                 lp("Identified no additional clusters in round %i" % (
                     i), 2, pD)
                 shutil.rmtree("%s/round_%i" % (pD['outdir'], i))
             i += 1
-    lp("Finished aligning and clustering %s" % (pD['infile']), 1, pD)
+    lp("Finished aligning and clustering %s" % (pD['alignment_infile']), 1, pD)
     lp("Identified %i clusters from %i fragments" % (len(currentD),
                                                      len(nams)), 1, pD)
     if os.path.exists("%s/final_clusters" % (pD['outdir'])):

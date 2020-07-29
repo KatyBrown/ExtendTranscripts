@@ -10,9 +10,10 @@ from UtilityFunctions import logPrint as lp
 # temporary until CIAlign is updated
 sys.path.insert(0, "/home/katy/CIAlign_P")
 import CIAlign.parsingFunctions
-
-
-def writeFastas(result, k, rround, outdir):
+    
+    
+def writeFastas(result, k, rround, outdir, candidates=False,
+                reference=None):
     '''
     Output three fasta files from a results dictionary generated with
     runAlignment.runAlignment.
@@ -53,7 +54,8 @@ def writeFastas(result, k, rround, outdir):
     both_out.close()
 
 
-def alignmentMeetsCriteria(result, query_seq, target_seq, pD):
+def alignmentMeetsCriteria(result, query_seq, target_seq, pD,
+                           is_candidate=False):
     '''
     Check that the alignment meets the criteria:
         * alignment length > pD['min_length']
@@ -255,28 +257,26 @@ def cleanAlignmentCIAlign(arr,
     relativePositions = list(range(0, len(arr[0])))
     # dictionary to keep track of what has been removed
     logD = dict()
-    logD['order'] = functions
+    
     # make a copy of the input array
     orig_arr = arr
     # these will always be run in the same order for now but might as
     # well make it possible to change the order in case it's needed later
 
-    if pD['alignment_remove_insertions_max_n'] == 0:
-        functions = functions - ['remove_insertions']
     if pD['alignment_clip_max_n']:
-        clipmax = pD['alignment_clip_max_perc']
+        clipmax = pD['alignment_clip_max_n'] / len(consensus)
     else:
-        clipmax = pD['alignment_clip_max_n']
-    if clipmax == 0:
-        functions = functions - ['crop_ends']
+        clipmax = pD['alignment_clip_max_perc']
 
+    logD['order'] = functions
     for function in functions:
         # check there's no weird functions in there
         assert function in ['remove_insertions',
                             'crop_ends',
                             'remove_gaponly'], (
                                 "CIAlign function %s not found" % function)
-        if function == "remove_insertions":
+        if function == "remove_insertions" and pD[
+                'remove_insertions_maxlen'] != 0:
             lp("Removing insertions", 3, pD)
             # store the previous set of indices
             p_relative = np.array(relativePositions)
@@ -299,7 +299,7 @@ def cleanAlignmentCIAlign(arr,
                 np.invert(np.in1d(p_relative, removed_relative)))[0]
             matrix = matrix[:, keep_absolute]
 
-        elif function == "crop_ends":
+        elif function == "crop_ends" and clipmax != 0:
             lp("Cropping ends", 3, pD)
 
             # store the previous set of indices
@@ -311,11 +311,10 @@ def cleanAlignmentCIAlign(arr,
             # sequence IDs and vals are tuples - tuple[0] is the positions
             # removed (replaced with "-") at the beginning
             # and tuple[1] is the positions removed from the end
-            clip_p = pD['alignment_clip_max_perc']
             arr, r = CIAlign.parsingFunctions.cropEnds(arr, nams,
                                                        relativePositions,
-                                                       redefine_perc=clip_p,
-                                                       mingap=0.01,
+                                                       redefine_perc=clipmax,
+                                                       mingap=0.001,
                                                        logtype='dict')
             # iterate through the dictionary
             for nam in r:
@@ -559,7 +558,6 @@ def findOverlapType(result, query_seq, target_seq, pD, keep_failed=False):
 
 
 def getAlignmentLocal(result, query_seq, target_seq, pD):
-
     Q_subseq = query_seq[result['query_start']:result['query_end']]
     T_subseq = target_seq[result['target_start']:result['target_end']]
 
@@ -575,7 +573,6 @@ def getAlignmentLocal(result, query_seq, target_seq, pD):
             min_ident = pD['alignment_ident_min_n'] / alignment_length
         else:
             min_ident = pD['alignment_ident_min_perc']
-
         if ident >= min_ident:
             return(Q_subseq, T_subseq, ident)
         else:

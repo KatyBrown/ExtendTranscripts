@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import UtilityFunctions
 import Consensus
 from UtilityFunctions import logPrint as lp
@@ -7,7 +6,7 @@ import Alignment
 
 
 def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
-                currentD=None):
+                currentD=None, candidate=False, reference_dict=None):
     X = copy.copy(Z)
     if not cons:
         Znams = [z[0] for z in Z]
@@ -43,7 +42,8 @@ def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
         # remove the query sequence from X
         X = X[1:]
         # Build a cluster based on the current query sequence
-        X, C = buildCluster(X, fasta_dict, current, pD, k, cons, currentD)
+        X, C = buildCluster(X, fasta_dict, current, pD, k, cons, currentD,
+                            candidate=candidate)
 
         D.setdefault(k, dict())
 
@@ -60,7 +60,7 @@ def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
 
     if len(X) == 1:
         D.setdefault(k, dict())
-        D[k]['consensus'] = X[0][1]
+        D[k]['consensus'] = current['consensus']
         nam = X[0][1]
         if not cons:
             D[k]['alignment'] = UtilityFunctions.AlignmentArray(
@@ -78,7 +78,8 @@ def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
 
 
 
-def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None):
+def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None,
+                 candidate=False, skip=False):
     '''
     Build a cluster based on the current query sequence.
     Adapted for large input files - don't store everything in memory
@@ -98,8 +99,13 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None):
     # Each time a match is found and the the cluster is updated, start again
     # with the new cluster as
     # a query.
+    i = 0
+    # run a first pass without going back to the top every time a new sequence
+    # is added - just switch to the consensus until you get to the end
+    first_pass_done = False
     while j != len(X) and len(X) != 0:
-        i = 0
+        if first_pass_done:
+            i = 0
         any_matches_inner = False
         n_new = 0
         # Look through all sequences which are not yet clustered until a match
@@ -128,6 +134,10 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None):
                                                         target_seq, pD)
             # if they are not try the reverse complement
 
+            if skip:
+                skipnames = query_names
+            else:
+                skipnames = []
             if not is_match[0]:
                 target_seq = UtilityFunctions.reverseComplement(target_seq)
                 result = Alignment.SWalign(query_seq, target_seq,
@@ -135,14 +145,14 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None):
                 is_match = Alignment.alignmentMeetsCriteria(result,
                                                             query_seq,
                                                             target_seq,
-                                                            pD)
+                                                            pD, candidate)
                 target_ali = UtilityFunctions.reverseComplementAlignment(
                     target_ali)
                 for nam in target_names:
                     seqdict[nam]['is_rc'] = True
 
-            if is_match[0]:
-                lp("Match found.", 3, pD)
+            if is_match[0] and target_nam not in skipnames:
+                lp("Match found.", 2, pD)
                 # We found a match - something has changed
                 any_matches_inner = True
                 n_new += 1
@@ -167,7 +177,8 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None):
                 current_consensus = Consensus.collapseAlignment(
                                     matrix, nt_inds)
                 current_alignment = ali
-                i = 0
+                if first_pass_done:
+                    i = 0
                 # now you have a match and the consensus is updated,
                 # start at the top again
                 break
@@ -183,14 +194,21 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None):
                                                       len(current_names)),
                2, pD)
             lp("Cleaning cluster %i with CIAlign" % (k), 3, pD)
-
+            if not candidate:
+                funcs = ['remove_insertions', 'crop_ends', 'remove_gaponly']
+            else:
+                funcs = ['remove_gaponly']
             R = Alignment.cleanAlignmentCIAlign(current_alignment,
                                                 current_names,
                                                 query_seq,
                                                 matrix,
                                                 nt_inds,
-                                                seqdict, pD)
+                                                seqdict, pD, functions=funcs)
+
             current_alignment, matrix, current_consensus, seqdict = R
+        elif not first_pass_done:
+            first_pass_done = True
+            i = 0
         else:
             break
 

@@ -56,6 +56,11 @@ def main():
                 Default: %(default)s. Type: %(type)s.""",
                 is_config_file=True)
 
+    general.add("-r", "--reference", dest='reference', type=str,
+                help="""Path to reference to use in first clustering round \
+                (otherwise all contigs are clustered). Default %(default)s \
+                Type %(type)s""", default=None)
+
     general.add("-vl", "--logging_verbosity", dest="logging_verbosity",
                 type=int,
                 help="""Logging verbosity level: 0: silent, 1: minimal,
@@ -90,6 +95,10 @@ def main():
                   choices=['stepwise', 'pairwise'],
                   help="""Alignment type to run - stepwise or pairwise. \
                   Default: %(default)s. Type: %(type)s.""")
+
+    alignment.add("--sequence_min_length", dest="alignment_min_length",
+                  type=int, help="""Minimum length contig to consider. \
+                  Default %(default)s. Type %(type)s""", default=30)
 
     alignment.add("--gap_open", dest="alignment_gap_open",
                   type=int,
@@ -264,10 +273,18 @@ def main():
         if args.alignment_infile is None:
             raise RuntimeError(
                 "To align contigs a fasta file of contigs must be specified")
-        fasta_dict = pyfaidx.Fasta(args.alignment_infile)
-        runAlignment.runAlignment(fasta_dict, pD, args.outdir,
-                                  alignment_type=args.alignment_type,
-                                  quick=False)
+        fasta_dict = pyfaidx.Fasta(args.alignment_infile,  )
+        if args.reference is None:
+            runAlignment.runAlignment(fasta_dict, pD, args.outdir,
+                                      alignment_type=args.alignment_type,
+                                      min_length=args.alignment_min_length,
+                                      quick=False)
+        else:            
+            runAlignment.runAlignment(fasta_dict, pD, args.outdir,
+                                      alignment_type=args.alignment_type,
+                                      min_length=args.alignment_min_length,
+                                      quick=False, candidates=True,
+                                      reference_dict=args.reference)
 
     if args.breakpoints:
         if args.breakpoint_contigs is None:
