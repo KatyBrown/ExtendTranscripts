@@ -127,7 +127,7 @@ def calcAltCoverage(bam_dict,
 
         else:
             # make a range covering all the positions in the read
-            read = [bam_dict[read_ID]['unpaired']]
+            read = bam_dict[read_ID]['unpaired']
             read_positions = np.arange(read['start'], read['end'])
 
             # add one to all the positions within the buffers
@@ -210,6 +210,10 @@ def bamToDict(bam, contig, contig_seq):
                 D[read_ID]['has_pair'] = True
             else:
                 thisdict = 'unpaired'
+                if line.is_reverse:
+                    strand = "+"
+                else:
+                    strand = "-"
                 D[read_ID]['has_pair'] = False
             # each read1, read2 or unpaired dict has
             # start - start position

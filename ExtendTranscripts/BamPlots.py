@@ -46,13 +46,13 @@ def plotAll(coverage_tab,
         subplot = plt.subplot(f[1, 0])
         plotAltCov(subplot, altCov, interval, paired, rl)
 
-       # if max(subtab['coverage']) < coverage_lim:
-        subplot = plt.subplot(f[2, 0])
-        subReadArr = getInRange(readArr[0], readArr[1],
-                                readArr[2],
-                                interval[0], interval[1])
-        plotReads(subplot, subReadArr,
-                      interval, paired, rl)
+        if max(subtab['coverage']) < coverage_lim:
+            subplot = plt.subplot(f[2, 0])
+            subReadArr = getInRange(readArr[0], readArr[1],
+                                    readArr[2],
+                                    interval[0], interval[1])
+            plotReads(subplot, subReadArr,
+                          interval, paired, rl)
         plt.savefig("%s/%s_coverage_%s_%s_%s.png" % (
                     outdir, contig, bamnam, interval[0], interval[1]),
                     dpi=figdpi, bbox_inches='tight')
@@ -126,21 +126,25 @@ def plotReads(subplot, readArr, interval, paired, rl):
     minus_ys = ys[strands == "-"]
 
     lw = 100 / np.shape(arr)[1]
-    print (lw)
+
     subplot.plot([plus_arr[0,:], plus_arr[1,:]],
                  [plus_ys, plus_ys], color='red', lw=lw)
-    subplot.plot([plus_arr[1,:], plus_arr[2,:]],
-                 [plus_ys, plus_ys], color='grey',
-                 ls='dotted', lw=lw)
-    subplot.plot([plus_arr[2,:], plus_arr[3,:]],
-                 [plus_ys, plus_ys],
-                 color='blue', lw=lw)
+
+    if paired:
+        subplot.plot([plus_arr[1,:], plus_arr[2,:]],
+             [plus_ys, plus_ys], color='grey',
+             ls='dotted', lw=lw)
+        subplot.plot([plus_arr[2,:], plus_arr[3,:]],
+                     [plus_ys, plus_ys],
+                     color='blue', lw=lw)
 
     subplot.plot([minus_arr[0,:], minus_arr[1,:]],
                  [minus_ys, minus_ys], color='green', lw=lw)
-    subplot.plot([minus_arr[1,:], minus_arr[2,:]],
-                 [minus_ys, minus_ys], color='grey',
-                 ls='dotted', lw=lw)
-    subplot.plot([minus_arr[2,:], minus_arr[3,:]],
-                 [minus_ys, minus_ys], color='orange', lw=lw)
+    
+    if paired:
+        subplot.plot([minus_arr[1,:], minus_arr[2,:]],
+                     [minus_ys, minus_ys], color='grey',
+                     ls='dotted', lw=lw)
+        subplot.plot([minus_arr[2,:], minus_arr[3,:]],
+                     [minus_ys, minus_ys], color='orange', lw=lw)
 
