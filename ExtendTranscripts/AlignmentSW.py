@@ -6,7 +6,8 @@ import Alignment
 
 
 def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
-                currentD=None, candidate=False, reference_dict=None):
+                currentD=None, candidate=False, reference_dict=None,
+                log=None):
     X = copy.copy(Z)
     if not cons:
         Znams = [z[0] for z in Z]
@@ -43,7 +44,7 @@ def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
         X = X[1:]
         # Build a cluster based on the current query sequence
         X, C = buildCluster(X, fasta_dict, current, pD, k, cons, currentD,
-                            candidate=candidate)
+                            candidate=candidate, log=log)
 
         D.setdefault(k, dict())
 
@@ -77,9 +78,8 @@ def runClusters(Z, fasta_dict, pD, seqdict, rround, cons=False,
     return (D)
 
 
-
 def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None,
-                 candidate=False, skip=False):
+                 candidate=False, skip=False, log=None):
     '''
     Build a cluster based on the current query sequence.
     Adapted for large input files - don't store everything in memory
@@ -195,7 +195,7 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None,
                2, pD)
             lp("Cleaning cluster %i with CIAlign" % (k), 3, pD)
             if not candidate:
-                funcs = ['remove_insertions', 'crop_ends', 'remove_gaponly']
+                funcs = ['remove_insertions',  'crop_ends', 'remove_gaponly']
             else:
                 funcs = ['remove_gaponly']
             R = Alignment.cleanAlignmentCIAlign(current_alignment,
@@ -203,7 +203,8 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None,
                                                 query_seq,
                                                 matrix,
                                                 nt_inds,
-                                                seqdict, pD, functions=funcs)
+                                                seqdict, pD, functions=funcs,
+                                                log=log)
 
             current_alignment, matrix, current_consensus, seqdict = R
         elif not first_pass_done:
