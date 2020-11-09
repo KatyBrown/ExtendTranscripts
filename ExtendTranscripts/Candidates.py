@@ -99,19 +99,19 @@ def runCandidates(Z, fasta_dict, seqdict, candfile, pD, outdir, rround,
     return(D)
 
 
-def splitAlignment(currentD, outdir, minlen=50):
+def splitAlignment(currentD, outdir, minlen=40):
     m = 1
+    newD = dict()
     comb_out = open("%s/round_1/consensus_combined.fasta" % outdir, "w")
     for k in currentD:
         ali = currentD[k]['alignment']
         nams = np.array(currentD[k]['names'][1:])
         cons = currentD[k]['consensus']
-        newD = dict()
         ali = ali[1:, :]
         not_gap_only = np.where(np.sum(ali == "-", 0) != np.shape(ali)[0])[0]
         cs = np.where(np.diff(not_gap_only) != 1)[0] + 1
         sub_arrs = [((s[0], s[-1])) for s in np.split(not_gap_only, cs)]
-        
+
         i = 0
         for sub_arr in sub_arrs:
             if (sub_arr[1] - sub_arr[0]) > minlen:
@@ -147,25 +147,61 @@ def splitAlignment(currentD, outdir, minlen=50):
     comb_out.close()
     return (newD)
 
-def alignWithRef(currentD, reference_fasta):
-    for i in currentD:
-        query_seq = current_consensus
-        query_ali = current_alignment
-        query_names = current_names
-        target_nam = X[i][1]
-        target_seq = fasta_dict[target_nam][0:].seq
-        if cons:
-            cons_n_t = int(target_nam.replace("*consensus_", ""))
-            target_ali = currentD[cons_n_t]['alignment']
-            target_names = currentD[cons_n_t]['names']
-        else:
-            target_ali = UtilityFunctions.AlignmentArray([target_seq])
-            target_names = [target_nam]
-        lp("Testing %s" % ", ".join(target_names), 3, pD)
-        # Align the query and target consensus sequences
-        result = Alignment.SWalign(query_seq, target_seq,
-                                   pD, useSub=True)
 
-        # Check the if the consensus sequences are a good match
-        is_match = Alignment.alignmentMeetsCriteria(result, query_seq,
-                                                    target_seq, pD)
+def alignWithRef(currentD, reference_dict, pD, outdir):
+    for i in currentD:
+        query_seq = currentD[i]['consensus']
+        query_ali = currentD[i]['alignment']
+        query_names = currentD[i]['names']
+        q_matrix, nt_inds = Consensus.makeAlignmentMatrix(query_ali)
+        candidates = UtilityFunctions.FastaToDict(reference_dict)
+        for target_nam, target_seq in candidates.items():
+            qm = copy.copy(q_matrix)
+            target_ali = UtilityFunctions.AlignmentArray([target_seq])
+            # Align the query and target consensus sequences
+            result = Alignment.SWalign(query_seq, target_seq,
+                                       pD, useSub=True)
+
+            # Check the if the consensus sequences are a good match
+            is_match = Alignment.alignmentMeetsCriteria(result, query_seq,
+                                                        target_seq, pD)
+
+            if is_match[0]:
+                result['alignment'] = is_match[1]
+                # get the full alignment for the two consensus sequences
+                result = Alignment.getAlignmentFull(result,
+                                                    query_seq,
+                                                    target_seq,
+                                                    pD)
+
+                ali, matrix = Consensus.expandAlignment(result,
+                                                        query_ali,
+                                                        target_ali,
+                                                        qm,
+                                                        nt_inds)
+                cons = Consensus.collapseAlignment(matrix, nt_inds)
+                names = query_names + [target_nam]
+                result2 = Alignment.SWalign(query_seq, cons, pD, useSub=True)
+                is_match_2 = Alignment.alignmentMeetsCriteria(result2,
+                                                              query_seq,
+                                                              cons,
+                                                              pD)
+                result2['alignment'] = is_match_2[1]
+                result2 = Alignment.getAlignmentFull(result2,
+                                                     query_seq,
+                                                     cons,
+                                                     pD)
+                a2 = UtilityFunctions.AlignmentArray([query_seq])
+                ali, matrix = Consensus.expandAlignment(result2,
+                                                        a2,
+                                                        ali,
+                                                        qm,
+                                                        nt_inds)
+                names = ["*consensus_%s" % i] + names
+                path = "%s/final_clusters/consensus_%s_to_%s_ali.fasta" % (
+                    outdir, i, target_nam.split(" ")[0])
+                out = open(path, "w")
+                for j, nam in enumerate(names):
+                    out.write(">%s\n%s\n" % (nam,
+                                             "".join(list(ali[j]))))
+                out.close()
