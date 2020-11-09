@@ -70,8 +70,10 @@ def calculateCoverage(contig_file,
         # convert to int
         cov_df['coverage'] = cov_df['coverage'].astype(int)
         cov_df['pos'] = cov_df['pos'].astype(int)
+        cov_df['reference_base'] = cov_df['reference_base'].str.upper()
 
     # save the coverage table
+    cov_df = cov_df[cov_df['chromosome'] == contig]
     cov_df.to_csv(out_tab, sep="\t", index=None)
     return (cov_df)
 
@@ -160,7 +162,7 @@ def getReadArray(bam_dict, paired):
             strands[i] = read['unpaired']['strand']
         arr[:, i] = span
         nams[i] = nam
-        
+
     return (nams, arr, strands)
 
 
@@ -240,7 +242,7 @@ def bamToDict(bam, contig, contig_seq):
         return(D, samfile, paired, mm, np.median(rlens))
     else:
         raise RuntimeWarning("""The bam file %s is not mapped \
-                             to contig %s""" % bam, contig)
+                             to contig %s""" % (bam, contig))
         return (None, None, None, None, None)
 
 
@@ -268,6 +270,92 @@ def getIntervals(start_interval, end_interval,
     return (intervals)
 
 
+def quantifyVariants(bamD):
+    varD = dict()
+    for read_name in bamD:
+        read_dicts = bamD[read_name]
+        for direc in read_dicts:
+            if direc != 'has_pair':
+                read_dict = read_dicts[direc]
+                if 'seq' in read_dict:
+                    poss, nucs = read_dict['seq']
+                    start = read_dict['start']
+                    for pos, nuc in zip(poss, nucs):
+                        x = pos + start + 1
+                        varD.setdefault(x, dict())
+                        varD[x].setdefault(nuc, 0)
+                        varD[x][nuc] += 1
+    return (varD)
+
+
+def quantifyCoverage(coverage_tab):
+    refD = dict(zip(coverage_tab['pos'], coverage_tab['reference_base']))
+    covD = dict(zip(coverage_tab['pos'], coverage_tab['coverage']))
+    return (refD, covD)
+
+
+def countVariants(refD, covD, varD, contig, contig_length, bamnam,
+                  outdir, minperc):
+    contig_length += 1
+    var_out = "%s/%s_%s_variants.tsv" % (outdir, contig, bamnam)
+    variant_list = []
+    variants_g = dict()
+    nucs = ['A', 'C', 'T', 'G']
+    alts = dict()
+    for nuc in nucs:
+        variants_g[nuc] = np.zeros((contig_length, 2))
+    variants_g['current'] = np.zeros(contig_length)
+    for pos in varD:
+        ref = refD[pos].upper()
+        tot = covD[pos]
+        alttot = sum(varD[pos].values())
+        reftot = tot - alttot
+
+        if (alttot / tot) > minperc:
+            v = [pos, ref, 'X', tot, reftot,
+                 alttot, 0, round(reftot/tot, 4),
+                 round(alttot/tot, 4), 0]
+            for nuc in nucs:
+                if nuc in varD[pos]:
+                    count = varD[pos][nuc]
+                    if count > v[6]:
+                        v[6] = count
+                        v[9] = round(count / tot, 4)
+                        v[2] = nuc
+                        alts[pos] = nuc
+                elif nuc == ref:
+                    count = reftot
+                else:
+                    count = 0
+                v.append(count)
+                perc = count / tot
+                v.append(round(perc, 4))
+                variants_g[nuc][pos, 0] = variants_g['current'][pos]
+                variants_g[nuc][pos, 1] = variants_g['current'][pos] + perc
+                variants_g['current'][pos] += perc
+            variant_list.append(v)
+    cols = ['position',
+            'ref',
+            'alt',
+            'coverage',
+            'coverage_ref',
+            'coverage_other',
+            'coverage_alt',
+            'perc_ref',
+            'perc_other',
+            'perc_alt']
+    for x in nucs:
+        cols += ['count_%s' % x, 'perc_%s' % x]
+    variant_tab = pd.DataFrame(variant_list, columns=cols)
+    variant_tab = variant_tab.sort_values('position')
+    common = np.empty(contig_length, dtype=bool)
+    common.fill(False)
+    common[variant_tab['position'][variant_tab['perc_other'] > 0.5]] = True
+    variant_tab.index = np.arange(len(variant_tab))
+    variant_tab.to_csv(var_out, sep="\t", index=None)
+    return (variants_g, variant_tab, alts, common)
+
+
 def runAll(fasta_dict,
            bam_files,
            outdir,
@@ -278,7 +366,10 @@ def runAll(fasta_dict,
            add_intervals=[],
            min_coverage=1,
            buffer_prop=0.1,
-           coverage_lim=1000):
+           coverage_lim=2000,
+           min_perc_variants=0.1,
+           translation_table=1,
+           min_orf_length=100):
 
     # run each contig / segment indivdually
     for nam in fasta_dict.keys():
@@ -292,7 +383,7 @@ def runAll(fasta_dict,
         out.close()
 
         # index it and load into a dict
-        contig_dict = pyfaidx.Fasta(contig_file)
+        contig_dict = pyfaidx.Fasta(contig_file, sequence_always_upper=True)
 
         # check how long it is
         contig_length = len(contig_dict[contig])
@@ -308,8 +399,14 @@ def runAll(fasta_dict,
         bedtool = pybedtools.BedTool(bednam)
 
         # get the sequence
-        contig_seq = contig_dict[contig][:].seq
+        contig_seq = contig_dict[contig][:].seq.upper()
 
+        #orfs, frames = UtilityFunctions.getORFs(contig_seq,
+        #                                        translation_table,
+        #                                        min_orf_length)
+        #orfD = UtilityFunctions.getORFPos(contig_seq, orfs, frames,
+        #                                  translation_table)
+        orfD = None
         # get the intervals to plot for this contig
         intervals = getIntervals(start_interval,
                                  end_interval,
@@ -335,6 +432,17 @@ def runAll(fasta_dict,
                                          buffer_prop,
                                          rl)
                 readArr = getReadArray(bamD, paired)
+                refD, covD = quantifyCoverage(coverage_tab)
+                varD = quantifyVariants(bamD)
+                vardat = countVariants(refD,
+                                       covD,
+                                       varD,
+                                       contig,
+                                       contig_length,
+                                       bamnam,
+                                       outdir,
+                                       min_perc_variants)
+                variants_g, variant_tab, altD, common = vardat
                 BamPlots.plotAll(coverage_tab,
                                  altCov,
                                  bam_file,
@@ -347,8 +455,15 @@ def runAll(fasta_dict,
                                  outdir,
                                  contig,
                                  contig_dict,
+                                 contig_seq,
                                  figdpi,
                                  intervals,
-                                 coverage_lim)
-
+                                 coverage_lim,
+                                 variants_g,
+                                 common,
+                                 min_perc_variants,
+                                 covD,
+                                 refD,
+                                 altD,
+                                 orfD)
 
