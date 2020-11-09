@@ -90,7 +90,6 @@ def updateArrays(old_alignment_array,
     matrix_updated = matrix
     old_alignment_array_updated = old_alignment_array
     new_alignment_array_updated = new_alignment_array
-
     if cigar_updated == "%sM" % UtilityFunctions.lengthFromCIGAR(
             cigar_updated):
         full_alignment_array = np.concatenate((old_alignment_array,
