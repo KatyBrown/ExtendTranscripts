@@ -8,9 +8,9 @@ import sys
 import os
 from UtilityFunctions import logPrint as lp
 # temporary until CIAlign is updated
-sys.path.insert(0, "/home/katy/CIAlign_P")
+#sys.path.insert(0, "/home/katy/CIAlign_P")
 import CIAlign.parsingFunctions
-    
+print (CIAlign.__file__)
     
 def writeFastas(result, k, rround, outdir, candidates=False,
                 reference=None):
@@ -248,7 +248,7 @@ def cleanAlignmentCIAlign(arr,
                           consensus, matrix, nt_inds, seqdict, pD,
                           functions=['remove_insertions',
                                      'crop_ends',
-                                     'remove_gaponly']):
+                                     'remove_gaponly'], log=None):
 
     # make a list of integers - one for each postiion
     # this is used to keep track of which positions from the input alignment
@@ -257,7 +257,7 @@ def cleanAlignmentCIAlign(arr,
     relativePositions = list(range(0, len(arr[0])))
     # dictionary to keep track of what has been removed
     logD = dict()
-    
+
     # make a copy of the input array
     orig_arr = arr
     # these will always be run in the same order for now but might as
@@ -267,8 +267,9 @@ def cleanAlignmentCIAlign(arr,
         clipmax = pD['alignment_clip_max_n'] / len(consensus)
     else:
         clipmax = pD['alignment_clip_max_perc']
-
+    # !!!
     logD['order'] = functions
+    
     for function in functions:
         # check there's no weird functions in there
         assert function in ['remove_insertions',
@@ -276,7 +277,7 @@ def cleanAlignmentCIAlign(arr,
                             'remove_gaponly'], (
                                 "CIAlign function %s not found" % function)
         if function == "remove_insertions" and pD[
-                'remove_insertions_maxlen'] != 0:
+                'alignment_remove_insertions_max_n'] != 0:
             lp("Removing insertions", 3, pD)
             # store the previous set of indices
             p_relative = np.array(relativePositions)
@@ -286,9 +287,11 @@ def cleanAlignmentCIAlign(arr,
             # ones using this alignment method
             R = CIAlign.parsingFunctions.removeInsertions(arr,
                                                           relativePositions,
-                                                          logtype='dict',
                                                           min_size=1,
-                                                          max_size=30)
+                                                          max_size=30,
+                                                          min_flank=3,
+                                                          rmfile="removed.log",
+                                                          log=log)
             arr, r, relativePositions = R
             # convert the removed positions to an np.array so they can be
             # used as an index
@@ -313,9 +316,10 @@ def cleanAlignmentCIAlign(arr,
             # and tuple[1] is the positions removed from the end
             arr, r = CIAlign.parsingFunctions.cropEnds(arr, nams,
                                                        relativePositions,
-                                                       redefine_perc=clipmax,
-                                                       mingap=0.001,
-                                                       logtype='dict')
+                                                       redefine_perc=0.001,
+                                                       mingap=0.01,
+                                                       rmfile="removed.log",
+                                                       log=log)
             # iterate through the dictionary
             for nam in r:
                 cs, ce = r[nam]
@@ -332,7 +336,8 @@ def cleanAlignmentCIAlign(arr,
             p_relative = np.array(relativePositions)
             R = CIAlign.parsingFunctions.removeGapOnly(arr,
                                                        relativePositions,
-                                                       logtype='dict')
+                                                       rmfile="removed.log",
+                                                       log=log)
             arr, r, relativePositions = R
             removed_relative = np.array(list(r))
             keep_absolute = np.where(
@@ -627,7 +632,6 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
     else:
         end_cigar = "%iI%s" % (Q_end_nclipped, end_cigar_end)
     cigar_updated = "%s%s%s" % (start_cigar, result['cigar'], end_cigar)
-
     qstart = query_seq[:result['query_start']]
     qend = query_seq[result['query_end']:]
 
