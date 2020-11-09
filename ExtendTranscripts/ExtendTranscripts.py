@@ -244,6 +244,23 @@ def main():
                     before coverage is plotted. Default %(default)s. \
                     Type: %(type)s""", default=1)
 
+    breakpoints.add("--min_perc_variants", dest="breakpoint_min_perc_variants",
+                    type=float, help="""Minimum proportion of reads with an \
+                    alternative allele at a position to include it in the \
+                    variant table and plots.  Default %(default)s. \
+                    Type: %(type)s""", default=0.1)
+
+    breakpoints.add("--translation_table", dest="breakpoint_translation_table",
+                    type=int, help="""Translation table (from NCBI) to use \
+                    when identifying ORFS to annotate. Default: %(default)s \
+                    Type: %(type)s""", default=1)
+
+    breakpoints.add("--min_orf_length", dest="breakpoint_min_orf_length",
+                    type=int, help="""Minimum ORF length (in amino acids) \
+                    to annotate. Default: %(default)s \
+                    Type: %(type)s""", default=100)
+
+
     args = parser.parse_args()
 
     if not os.path.exists(args.outdir):
@@ -278,13 +295,14 @@ def main():
             runAlignment.runAlignment(fasta_dict, pD, args.outdir,
                                       alignment_type=args.alignment_type,
                                       min_length=args.alignment_min_length,
-                                      quick=False)
-        else:         
+                                      quick=False, log=log)
+        else:  
             runAlignment.runAlignment(fasta_dict, pD, args.outdir,
                                       alignment_type=args.alignment_type,
                                       min_length=args.alignment_min_length,
                                       quick=False, candidates=True,
-                                      reference_dict=args.reference)
+                                      reference_dict=args.reference,
+                                      log=log)
 
     if args.breakpoints:
         if args.breakpoint_contigs is None:
@@ -304,7 +322,10 @@ specified")
                    start_interval=args.breakpoint_start_interval,
                    end_interval=args.breakpoint_end_interval,
                    add_intervals=args.breakpoint_additional_interval,
-                   min_coverage=args.breakpoint_min_coverage)
+                   min_coverage=args.breakpoint_min_coverage,
+                   min_perc_variants=args.breakpoint_min_perc_variants,
+                   translation_table=args.breakpoint_translation_table,
+                   min_orf_length=args.breakpoint_min_orf_length)
 
 
 if __name__ == "__main__":
