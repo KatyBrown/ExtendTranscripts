@@ -94,7 +94,7 @@ def main():
                   type=str,
                   choices=['stepwise', 'pairwise'],
                   help="""Alignment type to run - stepwise or pairwise. \
-                  Default: %(default)s. Type: %(type)s.""")
+                  Default: %(default)s. Type: %(type)s.""", default='stepwise')
 
     alignment.add("--sequence_min_length", dest="alignment_min_length",
                   type=int, help="""Minimum length contig to consider. \

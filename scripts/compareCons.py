@@ -55,13 +55,14 @@ def main():
     else:
         ali = ali_r
         cons_seq = cons_seq_r
-    q, t, ident = Alignment.getAlignmentLocal(ali, cons_seq, orig_seq, pD)
+    q, t, ident, c = Alignment.getAlignmentLocal(ali, cons_seq, orig_seq, pD,
+                                                 getcount=True)
     cons_length = len(cons_seq)
     orig_length = len(orig_seq)
     cons_perc_aligned = (ali['query_end'] - ali['query_start']) / cons_length
     orig_perc_aligned = (ali['target_end'] - ali['target_start']) / orig_length
 
-    print (ident, cons_perc_aligned, orig_perc_aligned)
+    print (c, ident, cons_perc_aligned, orig_perc_aligned)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,8 @@ import math
 import numpy as np
 import copy
 import BamPlots
+import Alignment
+import subprocess
 
 
 def calculateCoverage(contig_file,
@@ -23,6 +25,10 @@ def calculateCoverage(contig_file,
 
     out_tab = "%s/%s_coverage_%s_%s.tsv" % (outdir, contig,
                                             bamnam, typ)
+    out_tab_raw = "%s/%s_coverage_%s_%s_raw.tsv" % (outdir, contig,
+                                                    bamnam, typ)
+    out_tab_vcf = "%s/%s_coverage_%s_%s_raw.vcf" % (outdir, contig,
+                                                    bamnam, typ)
     # index the bam file (if needed)
     if not os.path.exists("%s.bai" % bam_file):
         pysam.index(bam_file)
@@ -51,7 +57,18 @@ def calculateCoverage(contig_file,
         cov = pysam.mpileup(bam_file, "-f", contig_file,
                             "-A", "-B", "-C", "0",
                             "-d", "0", "-Q", "0", "-aa")
+        out = open(out_tab_raw, "w")
+        out.write(cov)
+        out.close()
+        bcf_statement = ['bcftools', 'mpileup', "-f", contig_file,
+                         "-A", "-B", "-C", "0", "-d",
+                         "999999", "-Q", "0", bam_file]
 
+        P = subprocess.run(bcf_statement, stdout=subprocess.PIPE)
+        out = open(out_tab_vcf, "wb")
+        out.write(P.stdout)
+        out.close()
+                                  
         # convert the coverage table into a dataframe
         cov = [x.split("\t") for x in cov.split("\n")]
 
@@ -111,6 +128,9 @@ def calcAltCoverage(bam_dict,
         if bam_dict[read_ID]['has_pair']:
             read1 = bam_dict[read_ID]['read1']
             read2 = bam_dict[read_ID]['read2']
+            print (read_ID)
+            print (read1)
+            print (read2)
             # make a range covering all the positions in the read
             read1_positions = np.arange(read1['start'], read1['end'])
             read2_positions = np.arange(read2['start'], read2['end'])
@@ -144,23 +164,28 @@ def calcAltCoverage(bam_dict,
 
 def getReadArray(bam_dict, paired):
     if paired:
-        arr = np.empty([4, len(bam_dict)])
+        arr = np.empty([6, len(bam_dict)])
     else:
         arr = np.empty([2, len(bam_dict)])
     nams = np.empty(len(bam_dict), dtype='object')
     strands = np.empty(len(bam_dict), dtype='object')
     for i, (nam, read) in enumerate(bam_dict.items()):
-        if paired:
+        if read['read1'] != {}:
             span = np.array([read['read1']['start'],
                              read['read1']['end'],
                              read['read2']['start'],
                              read['read2']['end']])
             strands[i] = read['read1']['strand']
+            arr[0:4, i] = span
         else:
             span = np.array([read['unpaired']['start'],
                              read['unpaired']['end']])
             strands[i] = read['unpaired']['strand']
-        arr[:, i] = span
+            if paired:
+                arr[4:, i] = span
+            else:
+                arr[:, i] = span
+
         nams[i] = nam
 
     return (nams, arr, strands)
@@ -226,11 +251,37 @@ def bamToDict(bam, contig, contig_seq):
             D[read_ID][thisdict]['start'] = line.pos
             D[read_ID][thisdict]['end'] = line.aend
             D[read_ID][thisdict]['strand'] = strand
-
             read_ref = contig_seq[line.pos:line.aend]
 
-            if line.seq != read_ref:
-                this_read = np.array(list(line.seq))
+            c = line.cigartuples
+            c1 = [L[0] for L in c]
+            lineseq = line.seq
+
+            if c[0][0] == 4 or c[0][0] == 5:
+                lineseq = lineseq[(c[0][1]):]
+                if c[0][0] == 5:
+                    read_ref = read_ref[(c[0][1]):]
+                    if strand == "+":
+                        D[read_ID][thisdict]['start'] += c[0][1]
+                    else:
+                        D[read_ID][thisdict]['end'] -= c[0][1]
+            if c[-1][0] == 4 or c[-1][0] == 5:
+                lineseq = lineseq[:-c[-1][1]]
+                if c[-1][0] == 5:
+                    read_ref = read_ref[:-c[-1][1]]
+                    if strand == "+":
+                        D[read_ID][thisdict]['end'] -= c[-1][1]
+                    else:
+                        D[read_ID][thisdict]['start'] += c[-1][1]
+
+            if 1 in c1 or 2 in c1:
+                A = Alignment.alignFromCIGAR(lineseq,
+                                             read_ref,
+                                             line.cigarstring)
+                lineseq, read_ref = A
+
+            if lineseq != read_ref:
+                this_read = np.array(list(lineseq))
                 ref_read = np.array(list(read_ref))
                 # positions of differences
                 dpos = np.where(this_read != ref_read)[0]
@@ -310,7 +361,10 @@ def countVariants(refD, covD, varD, contig, contig_length, bamnam,
         tot = covD[pos]
         alttot = sum(varD[pos].values())
         reftot = tot - alttot
-
+        print (pos)
+        print (refD[pos])
+        print (covD[pos])
+        print (varD[pos])
         if (alttot / tot) > minperc:
             v = [pos, ref, 'X', tot, reftot,
                  alttot, 0, round(reftot/tot, 4),
@@ -415,6 +469,7 @@ def runAll(fasta_dict,
 
         # read each bam file for this contig
         for bam_file in bam_files:
+            print (bam_file)
             bamnam = os.path.splitext(os.path.basename(bam_file))[0]
             bamD, samfile, paired, mm, rl = bamToDict(bam_file, contig,
                                                       contig_seq)
@@ -434,6 +489,7 @@ def runAll(fasta_dict,
                 readArr = getReadArray(bamD, paired)
                 refD, covD = quantifyCoverage(coverage_tab)
                 varD = quantifyVariants(bamD)
+                print (varD)
                 vardat = countVariants(refD,
                                        covD,
                                        varD,

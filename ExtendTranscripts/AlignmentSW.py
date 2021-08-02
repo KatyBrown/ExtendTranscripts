@@ -207,6 +207,7 @@ def buildCluster(X, fasta_dict, current, pD, k, cons=False, currentD=None,
                                                 log=log)
 
             current_alignment, matrix, current_consensus, seqdict = R
+
         elif not first_pass_done:
             first_pass_done = True
             i = 0

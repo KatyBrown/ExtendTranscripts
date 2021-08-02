@@ -8,9 +8,9 @@ import sys
 import os
 from UtilityFunctions import logPrint as lp
 # temporary until CIAlign is updated
-#sys.path.insert(0, "/home/katy/CIAlign_P")
-import CIAlign.parsingFunctions
-print (CIAlign.__file__)
+sys.path.insert(0, "/home/katy/CIAlign/CIAlign")
+import parsingFunctions
+#print (CIAlign.__file__)
     
 def writeFastas(result, k, rround, outdir, candidates=False,
                 reference=None):
@@ -108,12 +108,16 @@ def alignmentMeetsCriteria(result, query_seq, target_seq, pD,
                     # all the False values are one element tuples so that
                     # the alignment can be returned and accessed if the
                     # result is True
+                    # print ("perc", alignment)
                     return (False, )
             else:
+                # print ("type")
                 return (False, )
         else:
+            # print ("indels")
             return (False, )
     else:
+        # print ("length")
         return (False, )
 
 
@@ -285,7 +289,7 @@ def cleanAlignmentCIAlign(arr,
             # returns a cleaned array and a  list of removed positions
             # only small insertions are removed - there shouldn't be big
             # ones using this alignment method
-            R = CIAlign.parsingFunctions.removeInsertions(arr,
+            R = parsingFunctions.removeInsertions(arr,
                                                           relativePositions,
                                                           min_size=1,
                                                           max_size=30,
@@ -314,10 +318,10 @@ def cleanAlignmentCIAlign(arr,
             # sequence IDs and vals are tuples - tuple[0] is the positions
             # removed (replaced with "-") at the beginning
             # and tuple[1] is the positions removed from the end
-            arr, r = CIAlign.parsingFunctions.cropEnds(arr, nams,
+            arr, r = parsingFunctions.cropEnds(arr, nams,
                                                        relativePositions,
-                                                       redefine_perc=0.001,
-                                                       mingap=0.01,
+                                                       redefine_perc=0.1,
+                                                       mingap=0.0001,
                                                        rmfile="removed.log",
                                                        log=log)
             # iterate through the dictionary
@@ -334,7 +338,7 @@ def cleanAlignmentCIAlign(arr,
 
         elif function == "remove_gaponly":
             p_relative = np.array(relativePositions)
-            R = CIAlign.parsingFunctions.removeGapOnly(arr,
+            R = parsingFunctions.removeGapOnly(arr,
                                                        relativePositions,
                                                        rmfile="removed.log",
                                                        log=log)
@@ -479,8 +483,7 @@ def alignFromCIGAR(seq1, seq2, cigar):
             s1 += '-' * count
             s2 += seq2[n2:n2 + count]
             n2 += count
-        else:
-            print(typ)
+
     if (len(s1) != len(s2)):
         raise RuntimeError("Aligned sequences are not the same length.")
     return (s1, s2)
@@ -562,7 +565,7 @@ def findOverlapType(result, query_seq, target_seq, pD, keep_failed=False):
     return (start_type, end_type)
 
 
-def getAlignmentLocal(result, query_seq, target_seq, pD):
+def getAlignmentLocal(result, query_seq, target_seq, pD, getcount=False):
     Q_subseq = query_seq[result['query_start']:result['query_end']]
     T_subseq = target_seq[result['target_start']:result['target_end']]
 
@@ -583,7 +586,10 @@ def getAlignmentLocal(result, query_seq, target_seq, pD):
         else:
             return (None, None, None)
     else:
-        return (Q_subseq, T_subseq, ident)
+        if not getcount:
+            return (Q_subseq, T_subseq, ident)
+        else:
+            return(Q_subseq, T_subseq, ident, sum(Q_subseq != T_subseq))
 
 
 def getAlignmentFull(result, query_seq, target_seq, pD):
@@ -632,6 +638,7 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
     else:
         end_cigar = "%iI%s" % (Q_end_nclipped, end_cigar_end)
     cigar_updated = "%s%s%s" % (start_cigar, result['cigar'], end_cigar)
+
     qstart = query_seq[:result['query_start']]
     qend = query_seq[result['query_end']:]
 
@@ -643,6 +650,7 @@ def getAlignmentFull(result, query_seq, target_seq, pD):
 
     result['query_seq_aligned'] = fullseqQ
     result['target_seq_aligned'] = fullseqT
+    
     if len(fullseqT) != len(fullseqQ):
         raise RuntimeError("Aligned sequences are not the same length")
     assert UtilityFunctions.lengthFromCIGAR(cigar_updated) == len(fullseqQ), (
